@@ -13,9 +13,7 @@ export default function GraficaMensual({ series }) {
 
   return (
     <div className="w-full h-full p-4 flex flex-col bg-gradient-to-b from-slate-900/80 to-slate-900/40 rounded-2xl">
-      <h3 className="text-lg font-semibold mb-2">
-        Serie de Evapotranspiración
-      </h3>
+      <h3 className="text-lg font-semibold mb-2">Lluvia, acumulado 7 meses y ET₀</h3>
 
       {/* CONTENEDOR SCROLLEABLE */}
       <div className="flex-1 w-full overflow-x-auto overflow-y-hidden scroll-minimal">
@@ -30,7 +28,7 @@ export default function GraficaMensual({ series }) {
 
               {/* DEGRADADO */}
               <defs>
-                <linearGradient id="etGradient" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="rainGradient" x1="0" y1="0" x2="0" y2="1">
   <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.55}/>
   <stop offset="50%" stopColor="#38bdf8" stopOpacity={0.25}/>
   <stop offset="100%" stopColor="#38bdf8" stopOpacity={0}/>
@@ -42,19 +40,25 @@ export default function GraficaMensual({ series }) {
                 tick={{ fontSize: 10 }}
               />
 
-              <YAxis domain={[0, "auto"]} />
+              <YAxis yAxisId="left" domain={[0, "auto"]} />
+              <YAxis yAxisId="right" orientation="right" domain={[0, "auto"]} width={52} />
 
               <Tooltip
-                formatter={(value) =>
-                  value ? `${value.toFixed(2)} mm/día` : "N/A"
-                }
+                formatter={(value, _label, item) => {
+                  if (value == null || !Number.isFinite(Number(value))) return ["N/A", ""];
+                  if (item?.dataKey === "et") {
+                    return [`${Number(value).toFixed(2)} mm/día`, "ET₀"];
+                  }
+                  return [`${Number(value).toFixed(2)} mm`, item?.name || ""];
+                }}
               />
 
               {/* AREA DEGRADADA */}
               <Area
+                yAxisId="left"
                 type="monotone"
-                dataKey="ET"
-                fill="url(#etGradient)"
+                dataKey="lluvia"
+                fill="url(#rainGradient)"
                 stroke="none"
                 baseValue={0}
                 connectNulls
@@ -64,12 +68,34 @@ export default function GraficaMensual({ series }) {
 
               {/* LINEA */}
               <Line
+                yAxisId="left"
                 type="monotone"
-                dataKey="ET"
+                dataKey="lluvia"
                 stroke="#38bdf8"
                 style={{ filter: "drop-shadow(0 0 8px rgba(56,189,248,0.9))" }}
                 strokeWidth={2.5}
                 dot={false}
+                isAnimationActive={false}
+              />
+
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="acumulado7d"
+                stroke="#f97316"
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+              />
+
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="et"
+                stroke="#34d399"
+                strokeWidth={2}
+                dot={false}
+                connectNulls
                 isAnimationActive={false}
               />
 

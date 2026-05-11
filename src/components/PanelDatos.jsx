@@ -1,13 +1,5 @@
-import {useMemo} from "react";
-import {
-  ThermometerSun,
-  ThermometerSnowflake,
-  Sun,
-  Wind,
-  Droplets,
-  Gauge,
-  Activity
-} from "lucide-react";
+import { useMemo } from "react";
+import { CloudRain, AlertTriangle, TimerReset, Mountain, Droplets, Activity } from "lucide-react";
 
 const MESES = [
   { value: 1, label: "ENE" },
@@ -45,14 +37,14 @@ export default function PanelDatos({ selectedPoint, selectedYear, selectedMonth,
     return MESES.filter(m => mesesDisponibles.includes(m.value));
   }, [series, selectedYear]);
 
-  // Cambio de color icono Evapotranspiración
-
-  const et = Number(selectedPoint?.ET_CALCULADA);
-
-  let etColor = "text-emerald-400";
-
-  if (et >= 4 && et < 6) etColor = "text-yellow-400";
-  if (et >= 6) etColor = "text-red-400";
+  const riskColor =
+    selectedPoint?.nivel_riesgo === "Muy alto"
+      ? "text-red-400"
+      : selectedPoint?.nivel_riesgo === "Alto"
+        ? "text-orange-400"
+        : selectedPoint?.nivel_riesgo === "Medio"
+          ? "text-yellow-300"
+          : "text-emerald-400";
 
   return (
     <div className="p-5 space-y-5 lg:h-full lg:overflow-y-auto scroll-minimal">
@@ -95,57 +87,69 @@ export default function PanelDatos({ selectedPoint, selectedYear, selectedMonth,
       {/* DATOS */}
       <div className="grid grid-cols-2 gap-4 text-sm">
         <Dato
-          icon={ThermometerSun}
-          label="Temperatura Máxima a 2M"
-          valor={selectedPoint.T2M_MAX}
-          unidad="°C"
+          icon={CloudRain}
+          label="Lluvia estimada"
+          valor={Number(selectedPoint.lluvia_mm || 0).toFixed(2)}
+          unidad="mm"
         />
 
         <Dato
-          icon={ThermometerSnowflake}
-          label="Temperatura Mínima a 2M"
-          valor={selectedPoint.T2M_MIN}
-          unidad="°C"
+          icon={TimerReset}
+          label="Acumulado 72h"
+          valor={Number(selectedPoint.acumulado_3d_mm || 0).toFixed(2)}
+          unidad="mm"
         />
 
         <Dato
-          icon={Sun}
-          label="Radiación solar estimada"
-          valor={Number(selectedPoint.RAD_ESTIMADA).toFixed(8)}
-          unidad="MJ/m²/día"
+          icon={TimerReset}
+          label="Acumulado 7 días"
+          valor={Number(selectedPoint.acumulado_7d_mm || 0).toFixed(2)}
+          unidad="mm"
         />
 
         <Dato
-          icon={Wind}
-          label="Velocidad del viento a 2M"
-          valor={selectedPoint.WS2M}
-          unidad="m/s"
+          icon={Mountain}
+          label="Pendiente"
+          valor={selectedPoint.pendiente_clase || "N/A"}
+          unidad=""
         />
 
         <Dato
           icon={Droplets}
-          label="Humedad relativa a 2M"
-          valor={selectedPoint.RH2M}
-          unidad="%"
+          label="Humedad de perfil (GWETPROF)"
+          valor={Number.isFinite(Number(selectedPoint.gwetprof)) ? Number(selectedPoint.gwetprof).toFixed(2) : "N/A"}
+          unidad=""
         />
 
         <Dato
-          icon={Gauge}
-          label="Presión atmosférica"
-          valor={selectedPoint.PS}
-          unidad="kPa"
+          icon={Mountain}
+          label="Distancia a río"
+          valor={selectedPoint.distancia_rio_m ?? "N/A"}
+          unidad="m"
+        />
+
+        <Dato
+          icon={Activity}
+          label="ET₀ calculada (FAO Penman-Monteith)"
+          valor={
+            Number.isFinite(Number(selectedPoint.ET_CALCULADA))
+              ? Number(selectedPoint.ET_CALCULADA).toFixed(2)
+              : "N/A"
+          }
+          unidad="mm/día"
         />
 
         <div className="col-span-2 bg-slate-950/60 p-3 rounded flex gap-3 items-center mb-2">
-          <Activity className={`w-6 h-6 ${etColor}`} />
+          <AlertTriangle className={`w-6 h-6 ${riskColor}`} />
           <div>
             <div className="text-gray-400 text-sm">
-              Evapotranspiración calculada
+              Riesgo de inundación actual
             </div>
             <div className="text-white font-semibold text-2xl">
-              {selectedPoint.ET_CALCULADA
-                ? Number(selectedPoint.ET_CALCULADA).toFixed(5)
-                : "N/A"} mm/día
+              {selectedPoint.nivel_riesgo || "N/A"}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              Índice base: {selectedPoint.indice_riesgo_base ?? "N/A"} | Municipio: {selectedPoint.municipio || "Tabasco"}
             </div>
           </div>
         </div>

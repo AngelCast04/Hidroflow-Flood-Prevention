@@ -1,70 +1,261 @@
-# Getting Started with Create React App
+# HydroFlow Flood Prevention - Guia de Desarrollo
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+## Objetivo
 
-## Available Scripts
+Reenfocar HydroFlow (actualmente orientado a evapotranspiracion y agrometeorologia) hacia una plataforma que ayude a reducir riesgo de inundaciones mediante visualizacion, analisis y recomendaciones tecnicas.
 
-In the project directory, you can run:
+## Despliegue en Render (reemplaza Netlify)
 
-### `npm start`
+Este proyecto usa Create React App y un servidor Node (`server.js`) que:
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- Sirve el frontend compilado (`build/`)
+- Expone el API `POST /api/chat` (requiere `OPENAI_API_KEY`)
+- Implementa RAG via Supabase (`rag_chunks` + `match_rag_chunks`)
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+### Opcion A (recomendada): Render Blueprint
 
-### `npm test`
+1) Sube el repo a GitHub.
+2) En Render, usa **Blueprint** y apunta al `render.yaml`.
+3) Configura variables de entorno:
+   - `OPENAI_API_KEY`
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY` (recomendada para el servidor)
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Render ejecutara:
 
-### `npm run build`
+- **Build Command**: `npm ci && npm run build`
+- **Start Command**: `npm start` (corre `node server.js`)
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### Opcion B: Crear Web Service manual
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+En Render:
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- **Type**: Web Service (Node)
+- **Build Command**: `npm ci && npm run build`
+- **Start Command**: `npm start`
+- **Environment Variables**: `OPENAI_API_KEY`
 
-### `npm run eject`
+## Desarrollo local
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+En una terminal:
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+```bash
+node server.js
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+En otra terminal:
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```bash
+npm run start:client
+```
 
-## Learn More
+La app (CRA) hara proxy de `/api/*` hacia `http://localhost:3001`.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## RAG (Supabase + pgvector)
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### 1) Crear esquema en Supabase
 
-### Code Splitting
+Ejecuta el SQL de:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+- `supabase/rag.sql`
 
-### Analyzing the Bundle Size
+Esto crea la tabla `rag_chunks` y la función `match_rag_chunks`.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### 2) Indexar el dataset espacial (una sola vez)
 
-### Making a Progressive Web App
+Configura env vars localmente (o en CI):
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+- `OPENAI_API_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
-### Advanced Configuration
+Luego:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+```bash
+npm run rag:index:spatial
+```
 
-### Deployment
+El script toma `public/data/Evapotranspiracion RP.csv`, genera embeddings y guarda chunks en `rag_chunks`.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+## 1) Definir alcance del MVP
 
-### `npm run build` fails to minify
+Antes de programar, define:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- Zona geografica: Tabasco completo o municipios especificos.
+- Horizonte temporal: historico, monitoreo diario, o pronostico corto (24-72 h).
+- Caso de uso principal:
+  - Monitoreo de lluvia y saturacion.
+  - Mapa de vulnerabilidad.
+  - Asistente de recomendaciones de prevencion.
+
+Resultado esperado del MVP: mapa de riesgo + panel de metricas + chat explicativo.
+
+## 2) Datos necesarios
+
+### 2.1 Meteorologicos (dinamicos)
+
+- Precipitacion (idealmente diaria u horaria).
+- Acumulados: 24h, 72h, 7 dias.
+- Opcional: ET y humedad para contexto.
+
+### 2.2 Geoespaciales (estaticos)
+
+- Pendiente/DEM.
+- Uso de suelo (urbano, rural, vegetacion).
+- Distancia a rios o cuerpos de agua.
+- Limites municipales/localidades.
+
+## 3) Estructura minima de archivos de datos
+
+### `lluvia_diaria.csv`
+
+Columnas sugeridas:
+
+- `fecha`
+- `lat`
+- `lon`
+- `municipio`
+- `lluvia_mm`
+- `acumulado_3d_mm`
+- `acumulado_7d_mm`
+
+### `riesgo_static.csv`
+
+Columnas sugeridas:
+
+- `lat`
+- `lon`
+- `municipio`
+- `pendiente_clase`
+- `uso_suelo`
+- `distancia_rio_m`
+- `indice_riesgo_base`
+
+## 4) Reutilizacion de la arquitectura actual de HydroFlow
+
+El proyecto ya tiene:
+
+- App React con mapa y paneles.
+- Carga de CSV con hooks (`useETdata`).
+- Chat serverless en Netlify (`netlify/functions/chat.js`).
+- Integracion con embeddings/Supabase.
+
+Reenfoque:
+
+- Crear hooks nuevos para lluvia/riesgo (`useRainData`, `useRiskData`).
+- Adaptar componentes de mapa y panel para capas de inundacion.
+- Cambiar prompt del asistente para analisis hidrometeorologico y prevencion.
+
+## 5) Indicadores de riesgo (version inicial)
+
+### 5.1 Riesgo por lluvia reciente (ejemplo)
+
+- Alto: `acumulado_3d > 100 mm`
+- Muy alto: `acumulado_7d > 200 mm`
+
+### 5.2 Riesgo estructural (ejemplo por puntajes)
+
+- Pendiente baja = +2
+- Uso urbano = +2
+- Distancia a rio < 500m = +3
+
+`indice_riesgo_base = suma de puntajes`
+
+### 5.3 Riesgo final (regla simple)
+
+Combinar:
+
+- `indice_riesgo_base`
+- `acumulado_3d_mm`
+- `acumulado_7d_mm`
+
+Salida:
+
+- Bajo / Medio / Alto (colores en mapa).
+
+## 6) Diseno funcional de pantallas
+
+### Vista principal
+
+- Mapa con selector de capa:
+  - Lluvia
+  - Riesgo de inundacion
+  - Historico
+- Selector temporal (fecha/rango).
+
+### Panel lateral
+
+- Lluvia 24h, 72h, 7d.
+- Indice de riesgo actual del punto seleccionado.
+- Tendencia reciente.
+
+### Grafica
+
+- Serie temporal de lluvia y eventos extremos.
+
+### Chat
+
+- Explicacion de riesgo en lenguaje claro.
+- Recomendaciones preventivas por municipio.
+
+## 7) Rediseno del asistente (chat)
+
+Cambiar enfoque del system prompt:
+
+- De cultivo/siembra -> gestion de riesgo por inundacion.
+- Instrucciones clave:
+  - Explicar limites de los datos.
+  - Distinguir historico vs pronostico.
+  - Dar recomendaciones generales de prevencion.
+  - Evitar afirmaciones absolutas.
+
+Incluir contexto en cada consulta:
+
+- Municipio, fecha, acumulados, nivel de riesgo, factores de vulnerabilidad.
+
+## 8) Plan tecnico por fases
+
+### Fase 1 - Datos y modelo basico
+
+1. Preparar CSV de lluvia y CSV de riesgo estatico.
+2. Validar calidad de datos (nulos, outliers, unidades).
+
+### Fase 2 - Frontend
+
+3. Crear hooks para nuevos datasets.
+4. Adaptar mapa y leyendas de riesgo.
+5. Adaptar panel y graficas.
+
+### Fase 3 - Chat
+
+6. Ajustar prompt del asistente y contexto inyectado.
+7. Anadir respuestas con acciones preventivas.
+
+### Fase 4 - Validacion
+
+8. Probar con eventos historicos conocidos.
+9. Ajustar umbrales y puntajes segun resultados.
+
+## 9) Criterios de exito del MVP
+
+- El mapa identifica claramente zonas con mayor riesgo relativo.
+- El panel muestra metricas comprensibles para usuario no tecnico.
+- El asistente explica "por que" de cada nivel de riesgo.
+- El resultado coincide razonablemente con eventos historicos observados.
+
+## 10) Riesgos y limitaciones
+
+- Sin niveles de rio o modelacion hidrologica avanzada, el sistema da una aproximacion.
+- Los umbrales iniciales deben calibrarse con expertos locales.
+- Es apoyo a decision, no sustituto de alertas oficiales de proteccion civil.
+
+## 11) Proximos pasos recomendados
+
+- Integrar pronostico de lluvia 24-72h.
+- Anadir capa de infraestructura critica (escuelas, hospitales, caminos).
+- Evaluar incorporacion de niveles de rio.
+- Publicar guia de uso y protocolo de respuesta comunitaria.
+
+## Nota de implementacion
+
+Esta guia esta disenada para aprovechar la base actual de HydroFlow y evolucionar de ET agricola hacia una herramienta practica de prevencion de inundaciones por etapas, empezando con un MVP funcional y escalable.

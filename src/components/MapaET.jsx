@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Tooltip, /*useMap */ } from 'react-leaflet'
+import React, { useMemo } from "react";
+import { MapContainer, TileLayer, CircleMarker, Tooltip } from "react-leaflet";
 import { useEffect } from "react";
 import L from "leaflet";
 import "leaflet.heat";
@@ -33,11 +33,7 @@ function HeatLayer({ puntos }) {
   useEffect(() => {
     if (!puntos.length) return;
 
-    const heatData = puntos.map(p => [
-      p.LAT,
-      p.LON,
-      p.items[0]?.ET_CALCULADA || 0
-    ]);
+    const heatData = puntos.map((p) => [p.lat, p.lon, p.lluvia_mm || 0]);
 
     const heat = L.heatLayer(heatData, {
       radius: window.innerWidth < 640 ? 15 : 25,
@@ -53,43 +49,27 @@ function HeatLayer({ puntos }) {
   return null;
 }
 
-export default function MapaET({ data, onPointClick, selectedCoords }) {
-  // ✅ usar useMemo siempre, sin return temprano
+const riskStyle = {
+  "Muy alto": { color: "#ef4444", radius: 10 },
+  Alto: { color: "#f97316", radius: 9 },
+  Medio: { color: "#facc15", radius: 8 },
+  Bajo: { color: "#22c55e", radius: 7 },
+};
+
+export default function MapaET({ puntosRaw, onPointClick, selectedCoords, activeLayer }) {
   const puntos = useMemo(() => {
-    if (!data || data.length === 0) return []
-    const agrupado = {}
-
-    data.forEach(row => {
-      const key = `${row.LAT}_${row.LON}`
-      if (!agrupado[key]) agrupado[key] = { LAT: row.LAT, LON: row.LON, items: [] }
-      agrupado[key].items.push(row)
-    })
-
-    return Object.values(agrupado)
-  }, [data])
+    if (!puntosRaw || !puntosRaw.length) return [];
+    return puntosRaw;
+  }, [puntosRaw]);
 
   const centro = useMemo(() => {
     if (puntos.length > 0) {
-      const lat = puntos.reduce((sum, p) => sum + p.LAT, 0) / puntos.length
-      const lon = puntos.reduce((sum, p) => sum + p.LON, 0) / puntos.length
-      return [lat, lon]
+      const lat = puntos.reduce((sum, p) => sum + p.lat, 0) / puntos.length;
+      const lon = puntos.reduce((sum, p) => sum + p.lon, 0) / puntos.length;
+      return [lat, lon];
     }
-    return [17.5, -91.25]
-  }, [puntos])
-
-  const getRepresentativeET = (items) => {
-    if (!items || items.length === 0) return null;
-
-    const latest = items
-      .filter(i => i.ET_CALCULADA != null)
-      .sort((a, b) => {
-        if (a.YEAR !== b.YEAR) return b.YEAR - a.YEAR;
-        return a.Month - b.Month;
-      })[0];
-
-    return latest?.ET_CALCULADA ?? null;
-  };
-
+    return [17.5, -91.25];
+  }, [puntos]);
 
   return (
     <div className="relative z-0 w-full h-full dashboard-card overflow-hidden">
@@ -106,35 +86,46 @@ export default function MapaET({ data, onPointClick, selectedCoords }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <HeatLayer puntos={puntos} />
+        {activeLayer === "lluvia" && <HeatLayer puntos={puntos} />}
 
         {/*<FlyToPoint center={selectedCoords ? [selectedCoords.LAT, selectedCoords.LON] : null} />*/}
 
         {puntos.map((p, i) => {
-          const repET = getRepresentativeET(p.items)
+          const style = riskStyle[p.nivel_riesgo] || riskStyle.Medio;
+          const isSelected =
+            selectedCoords &&
+            selectedCoords.lat === p.lat &&
+            selectedCoords.lon === p.lon;
+
           return (
             <CircleMarker
               key={i}
-              center={[p.LAT, p.LON]}
-              radius={window.innerWidth < 640 ? 14 : 8}
-              opacity={0}
-              fillOpacity={0}
+              center={[p.lat, p.lon]}
+              radius={isSelected ? style.radius + 2 : style.radius}
+              color={style.color}
+              weight={2}
+              fillColor={style.color}
+              fillOpacity={activeLayer === "historico" ? 0.25 : 0.7}
               eventHandlers={{
                 click: () => onPointClick(p),
-                touchstart: () => onPointClick(p)
+                touchstart: () => onPointClick(p),
               }}
             >
               <Tooltip direction="top" offset={[0, -8]} opacity={0.9}>
                 <div className="text-sm">
-                  <div><b>Lat:</b> {p.LAT.toFixed(3)}</div>
-                  <div><b>Lon:</b> {p.LON.toFixed(3)}</div>
-                  <div><b>ET (ej):</b> {repET != null ? repET.toFixed(2) : 'N/A'} mm/día</div>
+                  <div><b>Lat:</b> {p.lat.toFixed(3)}</div>
+                  <div><b>Lon:</b> {p.lon.toFixed(3)}</div>
+                  <div><b>Lluvia:</b> {Number(p.lluvia_mm || 0).toFixed(1)} mm</div>
+                  <div><b>GWETPROF:</b> {Number.isFinite(Number(p.gwetprof)) ? Number(p.gwetprof).toFixed(2) : "N/A"}</div>
+                  <div><b>ET₀:</b> {Number.isFinite(Number(p.ET_CALCULADA)) ? Number(p.ET_CALCULADA).toFixed(2) + " mm/día" : "N/A"}</div>
+                  <div><b>Acum 72h:</b> {Number(p.acumulado_3d_mm || 0).toFixed(1)} mm</div>
+                  <div><b>Riesgo:</b> {p.nivel_riesgo}</div>
                 </div>
               </Tooltip>
             </CircleMarker>
-          )
+          );
         })}
       </MapContainer>
     </div>
-  )
+  );
 }
