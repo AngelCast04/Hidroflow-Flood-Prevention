@@ -237,7 +237,7 @@ export default function App() {
       {/* autores */}
       <div className="space-y-1 text-sm text-slate-200">
         <p>Angel Gabriel Tadeo Castellano</p>
-        <p>Zona de analisis: Tabasco</p>
+        <p>Zona de Análisis: Tabasco</p>
       </div>
 
       {/* asesor */}
@@ -430,7 +430,7 @@ flex flex-col gap-6 min-w-0 min-h-0
 
   <div className="dashboard-card p-3 flex items-center gap-2 text-xs">
     <span className="text-slate-300">Capa:</span>
-    {["lluvia", "riesgo", "historico"].map((layer) => (
+    {["lluvia", "riesgo"].map((layer) => (
       <button
         key={layer}
         onClick={() => setActiveLayer(layer)}

@@ -105,7 +105,7 @@ export default function MapaET({ puntosRaw, onPointClick, selectedCoords, active
               color={style.color}
               weight={2}
               fillColor={style.color}
-              fillOpacity={activeLayer === "historico" ? 0.25 : 0.7}
+              fillOpacity={0.7}
               eventHandlers={{
                 click: () => onPointClick(p),
                 touchstart: () => onPointClick(p),

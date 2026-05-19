@@ -80,116 +80,138 @@ export default function useRainData() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/data/Evapotranspiracion RP.csv")
-      .then((res) => res.text())
-      .then((csv) => {
-        Papa.parse(csv, {
-          header: true,
-          dynamicTyping: true,
-          skipEmptyLines: true,
-          complete: (result) => {
-            const monthlyByPoint = new Map();
+    const datasetCandidates = [
+      "/data/Evapotranspiracion%20RP.csv",
+      "/data/Evapotranspiracion RP.csv",
+      "/data/evapotranspiracion_completa.csv",
+    ];
 
-            (result.data || []).forEach((r) => {
-              const year = Number(r.YEAR);
-              const lat = Number(r.LAT);
-              const lon = Number(r.LON);
-              const parametro = String(r.PARAMETRO || "").trim().toUpperCase();
+    const parseCsv = (csv) => {
+      Papa.parse(csv, {
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+        complete: (result) => {
+          const monthlyByPoint = new Map();
 
-              if (!Number.isFinite(year) || !Number.isFinite(lat) || !Number.isFinite(lon) || !parametro) {
-                return;
+          (result.data || []).forEach((r) => {
+            const year = Number(r.YEAR);
+            const lat = Number(r.LAT);
+            const lon = Number(r.LON);
+            const parametro = String(r.PARAMETRO || "").trim().toUpperCase();
+
+            if (!Number.isFinite(year) || !Number.isFinite(lat) || !Number.isFinite(lon) || !parametro) {
+              return;
+            }
+
+            MONTHS.forEach(({ key, month, label }) => {
+              const value = Number(r[key]);
+              if (!Number.isFinite(value)) return;
+
+              const pointMonthKey = `${lat}_${lon}_${year}_${month}`;
+              if (!monthlyByPoint.has(pointMonthKey)) {
+                monthlyByPoint.set(pointMonthKey, {
+                  fecha: MONTH_TO_DATE(year, month),
+                  YEAR: year,
+                  Month: month,
+                  Mes: label,
+                  lat,
+                  lon,
+                  municipio: getMunicipalityFromCoords(lat, lon),
+                  lluvia_mm: null,
+                  gwetprof: null,
+                  t2m_c: null,
+                  rh2_pct: null,
+                  rs_mj: null,
+                  ps_kpa: null,
+                  ws10_m_s: null,
+                  ET_CALCULADA: null,
+                });
               }
 
-              MONTHS.forEach(({ key, month, label }) => {
-                const value = Number(r[key]);
-                if (!Number.isFinite(value)) return;
+              const entry = monthlyByPoint.get(pointMonthKey);
+              if (parametro === "PRECTOTCORR") entry.lluvia_mm = value;
+              if (parametro === "GWETPROF") entry.gwetprof = value;
+              if (parametro === "T2M") entry.t2m_c = value;
+              if (parametro === "RH2M") entry.rh2_pct = value;
+              if (parametro === "PS") entry.ps_kpa = value;
+              if (parametro === "WS10M") entry.ws10_m_s = value;
+              if (parametro === "ALLSKY_SFC_SW_DWN") {
+                entry.rs_mj =
+                  Number.isFinite(value) && value > -998 && value < 998 ? value : null;
+              }
+            });
+          });
 
-                const pointMonthKey = `${lat}_${lon}_${year}_${month}`;
-                if (!monthlyByPoint.has(pointMonthKey)) {
-                  monthlyByPoint.set(pointMonthKey, {
-                    fecha: MONTH_TO_DATE(year, month),
-                    YEAR: year,
-                    Month: month,
-                    Mes: label,
-                    lat,
-                    lon,
-                    municipio: getMunicipalityFromCoords(lat, lon),
-                    lluvia_mm: null,
-                    gwetprof: null,
-                    t2m_c: null,
-                    rh2_pct: null,
-                    rs_mj: null,
-                    ps_kpa: null,
-                    ws10_m_s: null,
-                    ET_CALCULADA: null,
-                  });
-                }
-
-                const entry = monthlyByPoint.get(pointMonthKey);
-                if (parametro === "PRECTOTCORR") entry.lluvia_mm = value;
-                if (parametro === "GWETPROF") entry.gwetprof = value;
-                if (parametro === "T2M") entry.t2m_c = value;
-                if (parametro === "RH2M") entry.rh2_pct = value;
-                if (parametro === "PS") entry.ps_kpa = value;
-                if (parametro === "WS10M") entry.ws10_m_s = value;
-                if (parametro === "ALLSKY_SFC_SW_DWN") {
-                  entry.rs_mj =
-                    Number.isFinite(value) && value > -998 && value < 998 ? value : null;
-                }
-              });
+          const parsed = Array.from(monthlyByPoint.values())
+            .filter((r) => Number.isFinite(r.lluvia_mm))
+            .sort((a, b) => {
+              const byYearMonth = a.YEAR - b.YEAR || a.Month - b.Month;
+              if (byYearMonth !== 0) return byYearMonth;
+              return a.lat - b.lat || a.lon - b.lon;
+            })
+            .map((row) => {
+              const et =
+                Number.isFinite(row.t2m_c) && Number.isFinite(row.rh2_pct)
+                  ? calcEt0Monthly({
+                      latDeg: row.lat,
+                      month: row.Month,
+                      tMeanC: row.t2m_c,
+                      rhPct: row.rh2_pct,
+                      rsMjM2Day: row.rs_mj,
+                      psKpa: row.ps_kpa,
+                      ws10Ms: row.ws10_m_s,
+                    })
+                  : null;
+              return { ...row, ET_CALCULADA: et };
             });
 
-            const parsed = Array.from(monthlyByPoint.values())
-              .filter((r) => Number.isFinite(r.lluvia_mm))
-              .sort((a, b) => {
-                const byYearMonth = a.YEAR - b.YEAR || a.Month - b.Month;
-                if (byYearMonth !== 0) return byYearMonth;
-                return a.lat - b.lat || a.lon - b.lon;
-              })
-              .map((row) => {
-                const et =
-                  Number.isFinite(row.t2m_c) && Number.isFinite(row.rh2_pct)
-                    ? calcEt0Monthly({
-                        latDeg: row.lat,
-                        month: row.Month,
-                        tMeanC: row.t2m_c,
-                        rhPct: row.rh2_pct,
-                        rsMjM2Day: row.rs_mj,
-                        psKpa: row.ps_kpa,
-                        ws10Ms: row.ws10_m_s,
-                      })
-                    : null;
-                return { ...row, ET_CALCULADA: et };
-              });
+          const rollingByPoint = new Map();
+          const enriched = parsed.map((row) => {
+            const key = `${row.lat}_${row.lon}`;
+            const history = rollingByPoint.get(key) || [];
+            history.push(row);
 
-            const rollingByPoint = new Map();
-            const enriched = parsed.map((row) => {
-              const key = `${row.lat}_${row.lon}`;
-              const history = rollingByPoint.get(key) || [];
-              history.push(row);
+            const acumulado3d = history
+              .slice(-3)
+              .reduce((sum, item) => sum + (item.lluvia_mm || 0), 0);
+            const acumulado7d = history
+              .slice(-7)
+              .reduce((sum, item) => sum + (item.lluvia_mm || 0), 0);
 
-              const acumulado3d = history
-                .slice(-3)
-                .reduce((sum, item) => sum + (item.lluvia_mm || 0), 0);
-              const acumulado7d = history
-                .slice(-7)
-                .reduce((sum, item) => sum + (item.lluvia_mm || 0), 0);
+            rollingByPoint.set(key, history);
 
-              rollingByPoint.set(key, history);
+            return {
+              ...row,
+              acumulado_3d_mm: acumulado3d,
+              acumulado_7d_mm: acumulado7d,
+            };
+          });
 
-              return {
-                ...row,
-                acumulado_3d_mm: acumulado3d,
-                acumulado_7d_mm: acumulado7d,
-              };
-            });
+          setRows(enriched);
+          setLoading(false);
+        },
+        error: () => setLoading(false),
+      });
+    };
 
-            setRows(enriched);
-            setLoading(false);
-          },
-        });
-      })
-      .catch(() => setLoading(false));
+    (async () => {
+      for (const path of datasetCandidates) {
+        try {
+          const res = await fetch(path, { cache: "no-store" });
+          if (!res.ok) continue;
+          const csv = await res.text();
+          // Si devuelve HTML (fallback de SPA), no es el dataset.
+          if (/<!doctype html/i.test(csv)) continue;
+          if (!/PARAMETRO,YEAR,LAT,LON/i.test(csv.slice(0, 200))) continue;
+          parseCsv(csv);
+          return;
+        } catch (_e) {
+          // Intentar siguiente ruta
+        }
+      }
+      setLoading(false);
+    })();
   }, []);
 
   const latestDate = useMemo(() => {
