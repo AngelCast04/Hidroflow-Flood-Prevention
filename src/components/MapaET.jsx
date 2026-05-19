@@ -49,14 +49,7 @@ function HeatLayer({ puntos }) {
   return null;
 }
 
-const riskStyle = {
-  "Muy alto": { color: "#ef4444", radius: 10 },
-  Alto: { color: "#f97316", radius: 9 },
-  Medio: { color: "#facc15", radius: 8 },
-  Bajo: { color: "#22c55e", radius: 7 },
-};
-
-export default function MapaET({ puntosRaw, onPointClick, selectedCoords, activeLayer }) {
+export default function MapaET({ puntosRaw, onPointClick, selectedCoords }) {
   const puntos = useMemo(() => {
     if (!puntosRaw || !puntosRaw.length) return [];
     return puntosRaw;
@@ -70,6 +63,14 @@ export default function MapaET({ puntosRaw, onPointClick, selectedCoords, active
     }
     return [17.5, -91.25];
   }, [puntos]);
+
+  const rainMarkerStyle = (lluvia) => {
+    const v = Number(lluvia || 0);
+    if (v >= 80) return { color: "#1d4ed8", radius: 10 };
+    if (v >= 50) return { color: "#2563eb", radius: 9 };
+    if (v >= 25) return { color: "#0ea5e9", radius: 8 };
+    return { color: "#38bdf8", radius: 7 };
+  };
 
   return (
     <div className="relative z-0 w-full h-full dashboard-card overflow-hidden">
@@ -86,12 +87,12 @@ export default function MapaET({ puntosRaw, onPointClick, selectedCoords, active
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {activeLayer === "lluvia" && <HeatLayer puntos={puntos} />}
+        <HeatLayer puntos={puntos} />
 
         {/*<FlyToPoint center={selectedCoords ? [selectedCoords.LAT, selectedCoords.LON] : null} />*/}
 
         {puntos.map((p, i) => {
-          const style = riskStyle[p.nivel_riesgo] || riskStyle.Medio;
+          const style = rainMarkerStyle(p.lluvia_mm);
           const isSelected =
             selectedCoords &&
             selectedCoords.lat === p.lat &&
@@ -115,11 +116,7 @@ export default function MapaET({ puntosRaw, onPointClick, selectedCoords, active
                 <div className="text-sm">
                   <div><b>Lat:</b> {p.lat.toFixed(3)}</div>
                   <div><b>Lon:</b> {p.lon.toFixed(3)}</div>
-                  <div><b>Lluvia:</b> {Number(p.lluvia_mm || 0).toFixed(1)} mm</div>
-                  <div><b>GWETPROF:</b> {Number.isFinite(Number(p.gwetprof)) ? Number(p.gwetprof).toFixed(2) : "N/A"}</div>
-                  <div><b>ET₀:</b> {Number.isFinite(Number(p.ET_CALCULADA)) ? Number(p.ET_CALCULADA).toFixed(2) + " mm/día" : "N/A"}</div>
-                  <div><b>Acum 72h:</b> {Number(p.acumulado_3d_mm || 0).toFixed(1)} mm</div>
-                  <div><b>Riesgo:</b> {p.nivel_riesgo}</div>
+                  <div><b>Evapotranspiración:</b> {Number.isFinite(Number(p.ET_CALCULADA)) ? Number(p.ET_CALCULADA).toFixed(2) + " mm/día" : "N/A"}</div>
                 </div>
               </Tooltip>
             </CircleMarker>

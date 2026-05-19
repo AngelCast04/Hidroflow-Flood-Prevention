@@ -4,6 +4,7 @@ import useRiskData from "./hooks/useRiskData";
 import MapaET from "./components/MapaET";
 import GraficaMensual from "./components/GraficaMensual";
 import PanelDatos from "./components/PanelDatos";
+import InfoSheet from "./components/InfoSheet";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import "./index.css";
@@ -16,7 +17,7 @@ export default function App() {
   const [selectedPoint, setSelectedPoint] = useState(null);
   const [selectedYear, setSelectedYear] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(null);
-  const [activeLayer, setActiveLayer] = useState("riesgo");
+  const activeLayer = "lluvia";
   const [showInfo, setShowInfo] = useState(false);
 
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -64,7 +65,7 @@ export default function App() {
       `Municipio: ${selectedPoint.municipio || "Tabasco"}`,
       `Fecha: ${selectedPoint.fecha}`,
       `Lluvia mm: ${Number(selectedPoint.lluvia_mm || 0).toFixed(2)}`,
-      `ET0 mm/día: ${Number.isFinite(Number(selectedPoint.ET_CALCULADA)) ? Number(selectedPoint.ET_CALCULADA).toFixed(2) : "N/A"}`,
+      `Evapotranspiración mm/día: ${Number.isFinite(Number(selectedPoint.ET_CALCULADA)) ? Number(selectedPoint.ET_CALCULADA).toFixed(2) : "N/A"}`,
       `GWETPROF: ${Number.isFinite(Number(selectedPoint.gwetprof)) ? Number(selectedPoint.gwetprof).toFixed(2) : "N/A"}`,
       `Acumulado 3d mm: ${Number(selectedPoint.acumulado_3d_mm || 0).toFixed(2)}`,
       `Acumulado 7d mm: ${Number(selectedPoint.acumulado_7d_mm || 0).toFixed(2)}`,
@@ -418,7 +419,6 @@ flex flex-col gap-6 min-w-0 min-h-0
       : <MapaET
           puntosRaw={mapPoints}
           onPointClick={handlePointClick}
-          activeLayer={activeLayer}
           selectedCoords={selectedPoint ? { lat: selectedPoint.lat, lon: selectedPoint.lon } : null}
         />
     }
@@ -428,21 +428,7 @@ flex flex-col gap-6 min-w-0 min-h-0
     <GraficaMensual series={seriesForPlot}/>
   </div>
 
-  <div className="dashboard-card p-3 flex items-center gap-2 text-xs">
-    <span className="text-slate-300">Capa:</span>
-    {["lluvia", "riesgo"].map((layer) => (
-      <button
-        key={layer}
-        onClick={() => setActiveLayer(layer)}
-        className={`px-3 py-1 rounded ${
-          activeLayer === layer ? "bg-blue-600 text-white" : "bg-slate-900 text-slate-300"
-        }`}
-      >
-        {layer}
-      </button>
-    ))}
-    <span className="ml-auto text-slate-400">Fecha de corte: {latestDate || "N/A"}</span>
-  </div>
+  <InfoSheet selectedPoint={selectedPoint} activeLayer={activeLayer} />
 
 </div>
 

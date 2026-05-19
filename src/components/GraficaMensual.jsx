@@ -13,7 +13,7 @@ export default function GraficaMensual({ series }) {
 
   return (
     <div className="w-full h-full p-4 flex flex-col bg-gradient-to-b from-slate-900/80 to-slate-900/40 rounded-2xl">
-      <h3 className="text-lg font-semibold mb-2">Lluvia, acumulado 7 meses y ET₀</h3>
+      <h3 className="text-lg font-semibold mb-2">Lluvia, acumulado 7 meses y Evapotranspiración</h3>
 
       {/* CONTENEDOR SCROLLEABLE */}
       <div className="flex-1 w-full overflow-x-auto overflow-y-hidden scroll-minimal">
@@ -47,7 +47,7 @@ export default function GraficaMensual({ series }) {
                 formatter={(value, _label, item) => {
                   if (value == null || !Number.isFinite(Number(value))) return ["N/A", ""];
                   if (item?.dataKey === "et") {
-                    return [`${Number(value).toFixed(2)} mm/día`, "ET₀"];
+                    return [`${Number(value).toFixed(2)} mm/día`, "Evapotranspiración"];
                   }
                   return [`${Number(value).toFixed(2)} mm`, item?.name || ""];
                 }}
