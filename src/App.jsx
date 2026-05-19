@@ -424,7 +424,7 @@ flex flex-col gap-6 min-w-0 min-h-0
     }
   </div>
 
-  <div className="h-[30vh] lg:flex-[1] lg:h-auto min-w-0 dashboard-card overflow-hidden">
+  <div className="h-[30vh] lg:flex-[1] lg:h-auto min-w-0 dashboard-card overflow-visible">
     <GraficaMensual series={seriesForPlot}/>
   </div>
 
