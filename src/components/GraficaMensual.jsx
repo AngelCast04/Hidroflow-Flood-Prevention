@@ -1,5 +1,32 @@
 import { ComposedChart, Line, XAxis, YAxis, Tooltip, Area, ResponsiveContainer } from "recharts";
 
+function TooltipInfo({ active, label, payload }) {
+  if (!active || !payload?.length) return null;
+
+  const getValue = (key) => {
+    const entry = payload.find((p) => p?.dataKey === key);
+    const v = Number(entry?.value);
+    return Number.isFinite(v) ? v : null;
+  };
+
+  const lluvia = getValue("lluvia");
+  const acumulado7d = getValue("acumulado7d");
+  const et = getValue("et");
+
+  return (
+    <div className="bg-white/95 text-slate-800 rounded-md shadow-lg px-3 py-2 text-xs leading-tight min-w-[210px]">
+      <div className="font-semibold text-sm mb-1">{label}</div>
+      <div className="text-sky-600 font-medium">lluvia : {lluvia == null ? "N/A" : `${lluvia.toFixed(2)} mm`}</div>
+      <div className="text-orange-600 font-medium">
+        acumulado7d : {acumulado7d == null ? "N/A" : `${acumulado7d.toFixed(2)} mm`}
+      </div>
+      <div className="text-emerald-600 font-medium">
+        Evapotranspiración : {et == null ? "N/A" : `${et.toFixed(2)} mm/día`}
+      </div>
+    </div>
+  );
+}
+
 export default function GraficaMensual({ series }) {
   if (!series || series.length === 0)
     return (
@@ -8,18 +35,16 @@ export default function GraficaMensual({ series }) {
       </div>
     );
 
-  // 👉 1 punto ≈ 20px (ajustable)
+  // Volvemos al ancho extendido original para que la serie no se comprima.
   const chartWidth = Math.max(series.length * 20, 800);
 
   return (
     <div className="w-full h-full p-4 flex flex-col bg-gradient-to-b from-slate-900/80 to-slate-900/40 rounded-2xl">
-      <h3 className="text-lg font-semibold mb-2">Lluvia, acumulado 7 meses y Evapotranspiración</h3>
+      <h3 className="text-base font-semibold mb-2">Lluvia, acumulado 7 meses y Evapotranspiración</h3>
 
-      {/* CONTENEDOR SCROLLEABLE */}
-      <div className="flex-1 w-full overflow-x-auto overflow-y-hidden scroll-minimal">
+      <div className="flex-1 w-full overflow-x-auto overflow-y-visible scroll-minimal">
         <div style={{ width: chartWidth }} className="h-full">
-
-          <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%">
 
             <ComposedChart
               data={series}
@@ -37,20 +62,18 @@ export default function GraficaMensual({ series }) {
 
               <XAxis
                 dataKey="label"
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 9 }}
+                interval="preserveStartEnd"
+                minTickGap={20}
               />
 
               <YAxis yAxisId="left" domain={[0, "auto"]} />
               <YAxis yAxisId="right" orientation="right" domain={[0, "auto"]} width={52} />
 
               <Tooltip
-                formatter={(value, _label, item) => {
-                  if (value == null || !Number.isFinite(Number(value))) return ["N/A", ""];
-                  if (item?.dataKey === "et") {
-                    return [`${Number(value).toFixed(2)} mm/día`, "Evapotranspiración"];
-                  }
-                  return [`${Number(value).toFixed(2)} mm`, item?.name || ""];
-                }}
+                content={<TooltipInfo />}
+                allowEscapeViewBox={{ x: true, y: true }}
+                wrapperStyle={{ zIndex: 50 }}
               />
 
               {/* AREA DEGRADADA */}
@@ -101,8 +124,7 @@ export default function GraficaMensual({ series }) {
 
             </ComposedChart>
 
-          </ResponsiveContainer>
-
+        </ResponsiveContainer>
         </div>
       </div>
     </div>
