@@ -130,7 +130,7 @@ export default function PanelDatos({ selectedPoint, selectedYear, selectedMonth,
 
         <Dato
           icon={Activity}
-          label="ET₀ calculada (FAO Penman-Monteith)"
+          label="Evapotranspiración calculada (FAO Penman-Monteith)"
           valor={
             Number.isFinite(Number(selectedPoint.ET_CALCULADA))
               ? Number(selectedPoint.ET_CALCULADA).toFixed(2)
