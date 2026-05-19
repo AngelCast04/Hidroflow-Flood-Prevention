@@ -1,261 +1,182 @@
-# HydroFlow Flood Prevention - Guia de Desarrollo
+# HydroFlow Flood Prevention
 
-## Objetivo
+Plataforma web para **monitoreo y apoyo a la prevención de riesgo por inundación** en Tabasco (México). Evoluciona la base HydroFlow (evapotranspiración agrometeorológica) hacia visualización de lluvia, humedad de suelo, evapotranspiración de referencia (FAO Penman–Monteith), índice de riesgo relativo y un asistente conversacional.
 
-Reenfocar HydroFlow (actualmente orientado a evapotranspiracion y agrometeorologia) hacia una plataforma que ayude a reducir riesgo de inundaciones mediante visualizacion, analisis y recomendaciones tecnicas.
+**Repositorio:** [Hidroflow-Flood-Prevention](https://github.com/AngelCast04/Hidroflow-Flood-Prevention.git)
 
-## Despliegue en Render (reemplaza Netlify)
+---
 
-Este proyecto usa Create React App y un servidor Node (`server.js`) que:
+## Estado actual del MVP
 
-- Sirve el frontend compilado (`build/`)
-- Expone el API `POST /api/chat` (requiere `OPENAI_API_KEY`)
-- Implementa RAG via Supabase (`rag_chunks` + `match_rag_chunks`)
+| Área | Implementado |
+|------|----------------|
+| **Dataset** | `public/data/Evapotranspiracion RP.csv` (~12 150 filas, 10 parámetros MERRA-2, años **1981–2025**) |
+| **Mapa** | Capa fija de **lluvia**: heatmap + marcadores por intensidad de precipitación; tooltip con lat, lon y evapotranspiración |
+| **Panel** | Año/mes, lluvia, acumulados (3 y 7 meses), GWETPROF, riesgo, municipio aproximado |
+| **Info sheets** | Paneles visuales (lluvia, riesgo, evapotranspiración) al seleccionar un punto |
+| **Gráfica** | Serie mensual: lluvia, acumulado 7 meses, evapotranspiración (scroll horizontal, tooltip compacto) |
+| **Riesgo** | `useRiskData`: índice base sintético + umbrales sobre acumulados mensuales |
+| **Chat** | `POST /api/chat` vía `server.js` (OpenAI); RAG opcional con Supabase |
+| **Despliegue** | **Render** (Web Service Node).|
 
-### Opcion A (recomendada): Render Blueprint
+---
 
-1) Sube el repo a GitHub.
-2) En Render, usa **Blueprint** y apunta al `render.yaml`.
-3) Configura variables de entorno:
-   - `OPENAI_API_KEY`
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY` (recomendada para el servidor)
+## Dataset (`Evapotranspiracion RP.csv`)
 
-Render ejecutara:
+Formato **ancho**: una fila por `PARAMETRO`, `YEAR`, `LAT`, `LON` y columnas mensuales `JAN`…`DEC` (+ `ANN`, no usada en el pivote).
 
-- **Build Command**: `npm ci && npm run build`
-- **Start Command**: `npm start` (corre `node server.js`)
+### Parámetros en el archivo (10)
 
-### Opcion B: Crear Web Service manual
+| PARAMETRO | Descripción breve |
+|-----------|-------------------|
+| `PRECTOTCORR` | Precipitación mensual corregida |
+| `GWETPROF` | Humedad de perfil del suelo (0–1) |
+| `GWETROOT` | Humedad en zona radicular |
+| `T2M` | Temperatura media a 2 m |
+| `T2MDEW` | Temperatura de punto de rocío a 2 m |
+| `RH2M` | Humedad relativa a 2 m |
+| `QV2M` | Razón de mezcla de vapor de agua |
+| `ALLSKY_SFC_SW_DWN` | Radiación solar de onda corta en superficie |
+| `PS` | Presión superficial |
+| `WS10M` | Velocidad del viento a 10 m |
 
-En Render:
+### Parámetros usados por la aplicación (7)
 
-- **Type**: Web Service (Node)
-- **Build Command**: `npm ci && npm run build`
-- **Start Command**: `npm start`
-- **Environment Variables**: `OPENAI_API_KEY`
+`PRECTOTCORR`, `GWETPROF`, `T2M`, `RH2M`, `ALLSKY_SFC_SW_DWN`, `PS`, `WS10M` → pivote en `useRainData.js`, cálculo de **evapotranspiración** (`ET_CALCULADA`, FAO-56) y acumulados móviles de lluvia a **3 y 7 meses**.
+
+Los parámetros `GWETROOT`, `QV2M` y `T2MDEW` están en el CSV y quedan disponibles para ampliar el modelo sin cambiar el formato.
+
+### Carga de datos
+
+El hook prueba varias rutas (incl. codificación `%20` en el nombre del archivo) y valida que la respuesta no sea HTML del fallback de la SPA.
+
+---
+
+## Arquitectura
+
+```
+┌─────────────────┐     proxy /api/*      ┌──────────────────┐
+│  React (CRA)    │ ────────────────────► │  server.js       │
+│  puerto 3000    │   (solo desarrollo)   │  Express :3001   │
+└─────────────────┘                       │  + build/ estático│
+                                          │  POST /api/chat  │
+                                          └────────┬─────────┘
+                                                   │
+                                          OpenAI (+ Supabase RAG opcional)
+```
+
+| Componente | Ruta / archivo |
+|------------|----------------|
+| Orquestación UI | `src/App.jsx` |
+| Datos lluvia / ET | `src/hooks/useRainData.js` |
+| Riesgo | `src/hooks/useRiskData.js` |
+| ET₀ | `src/utils/calcEt0Monthly.js` |
+| Mapa | `src/components/MapaET.jsx` |
+| Panel | `src/components/PanelDatos.jsx` |
+| Gráfica | `src/components/GraficaMensual.jsx` |
+| Info sheets | `src/components/InfoSheet.jsx` |
+| API producción | `server.js` |
+| Blueprint Render | `render.yaml` |
+| Esquema RAG | `supabase/rag.sql` |
+| Indexado RAG | `scripts/rag_index_spatial.js` |
+
+**Legado:** `src/hooks/useETdata.js` y `evapotranspiracion_completa.csv` ya no alimentan la app en runtime.
+
+Documentación técnica ampliada: [`MANUAL_TECNICO_HYDROFLOW_FLOOD_PREVENTION.md`](MANUAL_TECNICO_HYDROFLOW_FLOOD_PREVENTION.md).
+
+---
 
 ## Desarrollo local
 
-En una terminal:
+Requisitos: **Node 20+** (ver `engines` en `package.json`).
+
+**Terminal 1** — API y proxy de producción local:
 
 ```bash
+npm install
 node server.js
 ```
 
-En otra terminal:
+**Terminal 2** — frontend con proxy a `http://localhost:3001`:
 
 ```bash
 npm run start:client
 ```
 
-La app (CRA) hara proxy de `/api/*` hacia `http://localhost:3001`.
+Copia `.env.example` → `.env.local` y define al menos `OPENAI_API_KEY` para probar el chat.
+
+| Script | Uso |
+|--------|-----|
+| `npm start` | Producción: `node server.js` (sirve `build/` + API) |
+| `npm run start:client` | Solo CRA en desarrollo |
+| `npm run build` | Compila React en `build/` |
+| `npm run rag:index:spatial` | Indexa puntos del CSV en Supabase |
+
+---
+
+## Despliegue en Render
+
+El proyecto **ya no usa Netlify**. El despliegue oficial es un **Web Service Node** en [Render](https://render.com).
+
+### Opción A (recomendada): Blueprint
+
+1. Conecta el repositorio en Render.
+2. Usa **Blueprint** apuntando a `render.yaml`.
+3. Configura variables de entorno (panel de Render):
+
+| Variable | Obligatoria | Uso |
+|----------|-------------|-----|
+| `OPENAI_API_KEY` | Sí (chat) | Embeddings + respuestas del asistente |
+| `SUPABASE_URL` | No (RAG) | Búsqueda vectorial |
+| `SUPABASE_ANON_KEY` | No (RAG) | Cliente en servidor; preferible `SUPABASE_SERVICE_ROLE_KEY` para indexado |
+| `SUPABASE_SERVICE_ROLE_KEY` | Recomendada para indexar | Script `rag:index:spatial` e inserciones |
+
+Render ejecuta:
+
+- **Build:** `npm install --no-audit --no-fund && npm run build`
+- **Start:** `npm start` → `node server.js`
+- **Node:** `20.18.0` (`NODE_VERSION` en `render.yaml`)
+
+### Opción B: Web Service manual
+
+- **Type:** Web Service (Node)
+- **Build Command:** `npm install --no-audit --no-fund && npm run build`
+- **Start Command:** `npm start`
+- Mismas variables de entorno que arriba.
+
+> En desarrollo, si solo ejecutas `npm run start:client` sin `node server.js`, las llamadas a `/api/chat` fallan con error de proxy (ECONNREFUSED).
+
+---
 
 ## RAG (Supabase + pgvector)
 
-### 1) Crear esquema en Supabase
+1. Ejecuta el SQL en `supabase/rag.sql` (tabla `rag_chunks`, función `match_rag_chunks`).
+2. Configura `OPENAI_API_KEY`, `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`.
+3. Indexa una vez: `npm run rag:index:spatial`.
 
-Ejecuta el SQL de:
+El chat enriquece el contexto con fragmentos similares cuando Supabase está configurado en el servidor.
 
-- `supabase/rag.sql`
+---
 
-Esto crea la tabla `rag_chunks` y la función `match_rag_chunks`.
+## Interfaz (resumen)
 
-### 2) Indexar el dataset espacial (una sola vez)
+- **Mapa:** solo visualización de **lluvia** (sin selector de capas histórico/riesgo en mapa).
+- **Marcadores:** color/tamaño según `lluvia_mm` del último periodo disponible.
+- **Tooltip mapa:** Lat, Lon, Evapotranspiración (mm/día).
+- **Panel + InfoSheet:** métricas detalladas y sheets de lluvia, riesgo y evapotranspiración.
+- **Etiquetas UI:** se usa **“Evapotranspiración”** en lugar de “ET/ET₀” en la interfaz.
 
-Configura env vars localmente (o en CI):
+---
 
-- `OPENAI_API_KEY`
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+## Limitaciones y próximos pasos
 
-Luego:
+- Acumulados “3d/7d” en datos **mensuales** = ventanas de **3 y 7 meses**; conviene renombrar en UI o ingestar series diarias.
+- Riesgo estructural (pendiente, uso de suelo, distancia a río) es **sintético** hasta integrar capas geoespaciales reales.
+- Sin modelado hidráulico ni niveles de río: **apoyo a la decisión**, no sustituto de alertas oficiales.
+- Roadmap: pronóstico 24–72 h, `lluvia_diaria.csv` / `riesgo_static.csv`, calibración de umbrales con expertos locales, uso de `GWETROOT` / `T2MDEW` en el panel.
 
-```bash
-npm run rag:index:spatial
-```
+---
 
-El script toma `public/data/Evapotranspiracion RP.csv`, genera embeddings y guarda chunks en `rag_chunks`.
+## Licencia y uso
 
-## 1) Definir alcance del MVP
-
-Antes de programar, define:
-
-- Zona geografica: Tabasco completo o municipios especificos.
-- Horizonte temporal: historico, monitoreo diario, o pronostico corto (24-72 h).
-- Caso de uso principal:
-  - Monitoreo de lluvia y saturacion.
-  - Mapa de vulnerabilidad.
-  - Asistente de recomendaciones de prevencion.
-
-Resultado esperado del MVP: mapa de riesgo + panel de metricas + chat explicativo.
-
-## 2) Datos necesarios
-
-### 2.1 Meteorologicos (dinamicos)
-
-- Precipitacion (idealmente diaria u horaria).
-- Acumulados: 24h, 72h, 7 dias.
-- Opcional: ET y humedad para contexto.
-
-### 2.2 Geoespaciales (estaticos)
-
-- Pendiente/DEM.
-- Uso de suelo (urbano, rural, vegetacion).
-- Distancia a rios o cuerpos de agua.
-- Limites municipales/localidades.
-
-## 3) Estructura minima de archivos de datos
-
-### `lluvia_diaria.csv`
-
-Columnas sugeridas:
-
-- `fecha`
-- `lat`
-- `lon`
-- `municipio`
-- `lluvia_mm`
-- `acumulado_3d_mm`
-- `acumulado_7d_mm`
-
-### `riesgo_static.csv`
-
-Columnas sugeridas:
-
-- `lat`
-- `lon`
-- `municipio`
-- `pendiente_clase`
-- `uso_suelo`
-- `distancia_rio_m`
-- `indice_riesgo_base`
-
-## 4) Reutilizacion de la arquitectura actual de HydroFlow
-
-El proyecto ya tiene:
-
-- App React con mapa y paneles.
-- Carga de CSV con hooks (`useETdata`).
-- Chat serverless en Netlify (`netlify/functions/chat.js`).
-- Integracion con embeddings/Supabase.
-
-Reenfoque:
-
-- Crear hooks nuevos para lluvia/riesgo (`useRainData`, `useRiskData`).
-- Adaptar componentes de mapa y panel para capas de inundacion.
-- Cambiar prompt del asistente para analisis hidrometeorologico y prevencion.
-
-## 5) Indicadores de riesgo (version inicial)
-
-### 5.1 Riesgo por lluvia reciente (ejemplo)
-
-- Alto: `acumulado_3d > 100 mm`
-- Muy alto: `acumulado_7d > 200 mm`
-
-### 5.2 Riesgo estructural (ejemplo por puntajes)
-
-- Pendiente baja = +2
-- Uso urbano = +2
-- Distancia a rio < 500m = +3
-
-`indice_riesgo_base = suma de puntajes`
-
-### 5.3 Riesgo final (regla simple)
-
-Combinar:
-
-- `indice_riesgo_base`
-- `acumulado_3d_mm`
-- `acumulado_7d_mm`
-
-Salida:
-
-- Bajo / Medio / Alto (colores en mapa).
-
-## 6) Diseno funcional de pantallas
-
-### Vista principal
-
-- Mapa con selector de capa:
-  - Lluvia
-  - Riesgo de inundacion
-  - Historico
-- Selector temporal (fecha/rango).
-
-### Panel lateral
-
-- Lluvia 24h, 72h, 7d.
-- Indice de riesgo actual del punto seleccionado.
-- Tendencia reciente.
-
-### Grafica
-
-- Serie temporal de lluvia y eventos extremos.
-
-### Chat
-
-- Explicacion de riesgo en lenguaje claro.
-- Recomendaciones preventivas por municipio.
-
-## 7) Rediseno del asistente (chat)
-
-Cambiar enfoque del system prompt:
-
-- De cultivo/siembra -> gestion de riesgo por inundacion.
-- Instrucciones clave:
-  - Explicar limites de los datos.
-  - Distinguir historico vs pronostico.
-  - Dar recomendaciones generales de prevencion.
-  - Evitar afirmaciones absolutas.
-
-Incluir contexto en cada consulta:
-
-- Municipio, fecha, acumulados, nivel de riesgo, factores de vulnerabilidad.
-
-## 8) Plan tecnico por fases
-
-### Fase 1 - Datos y modelo basico
-
-1. Preparar CSV de lluvia y CSV de riesgo estatico.
-2. Validar calidad de datos (nulos, outliers, unidades).
-
-### Fase 2 - Frontend
-
-3. Crear hooks para nuevos datasets.
-4. Adaptar mapa y leyendas de riesgo.
-5. Adaptar panel y graficas.
-
-### Fase 3 - Chat
-
-6. Ajustar prompt del asistente y contexto inyectado.
-7. Anadir respuestas con acciones preventivas.
-
-### Fase 4 - Validacion
-
-8. Probar con eventos historicos conocidos.
-9. Ajustar umbrales y puntajes segun resultados.
-
-## 9) Criterios de exito del MVP
-
-- El mapa identifica claramente zonas con mayor riesgo relativo.
-- El panel muestra metricas comprensibles para usuario no tecnico.
-- El asistente explica "por que" de cada nivel de riesgo.
-- El resultado coincide razonablemente con eventos historicos observados.
-
-## 10) Riesgos y limitaciones
-
-- Sin niveles de rio o modelacion hidrologica avanzada, el sistema da una aproximacion.
-- Los umbrales iniciales deben calibrarse con expertos locales.
-- Es apoyo a decision, no sustituto de alertas oficiales de proteccion civil.
-
-## 11) Proximos pasos recomendados
-
-- Integrar pronostico de lluvia 24-72h.
-- Anadir capa de infraestructura critica (escuelas, hospitales, caminos).
-- Evaluar incorporacion de niveles de rio.
-- Publicar guia de uso y protocolo de respuesta comunitaria.
-
-## Nota de implementacion
-
-Esta guia esta disenada para aprovechar la base actual de HydroFlow y evolucionar de ET agricola hacia una herramienta practica de prevencion de inundaciones por etapas, empezando con un MVP funcional y escalable.
+Herramienta de apoyo técnico-comunitario. Validar umbrales y recomendaciones con autoridades locales antes de decisiones operativas.
