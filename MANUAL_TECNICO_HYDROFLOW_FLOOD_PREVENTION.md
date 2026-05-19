@@ -1,224 +1,304 @@
 # Manual técnico — HydroFlow Flood Prevention
 
-**Versión del documento:** 1.0  
-**Alcance:** Descripción de la evolución del proyecto desde la base orientada a evapotranspiración agrometeorológica hacia una plataforma de **monitoreo y apoyo a la prevención de riesgo por inundación**, incluyendo integración del dataset `Evapotranspiracion RP.csv`, cálculo de ET₀ y asistente conversacional.
+**Versión del documento:** 1.1  
+**Fecha de revisión:** mayo 2026  
+**Alcance:** Arquitectura, dataset ampliado, pipeline de datos, UI actual, API de chat, RAG y despliegue en **Render**.
 
 ---
 
-## 1. Objetivo del reenfoque
+## 1. Objetivo del producto
 
-El producto **HydroFlow Flood Prevention** concentra el MVP en:
+**HydroFlow Flood Prevention** es un MVP web que concentra:
 
-- Visualización **geoespacial** de indicadores relacionados con **lluvia**, **riesgo relativo** y **serie histórica**.
-- **Panel** con métricas comprensibles (acumulados, humedad de perfil, ET₀, riesgo).
-- **Gráfica** de series temporales (lluvia, acumulado móvil a 7 meses, ET₀).
-- **Asistente** que explica riesgo y medidas preventivas con **lenguaje claro**, sin sustituir alertas oficiales.
+- Visualización **geoespacial** de **lluvia** (mapa con heatmap y marcadores).
+- **Panel** e **Info sheets** con métricas de lluvia, humedad de perfil, evapotranspiración de referencia y **riesgo relativo**.
+- **Gráfica** de series temporales mensuales.
+- **Asistente** (`POST /api/chat`) que explica riesgo y medidas preventivas con lenguaje claro.
 
-La guía de producto y fases está alineada conceptualmente con `README.md` (MVP: mapa + panel + chat).
+El sistema es **apoyo a la decisión**; no reemplaza alertas de Protección Civil u organismos oficiales.
 
 ---
 
-## 2. Stack y estructura relevante
+## 2. Stack y despliegue
 
 | Capa | Tecnología |
 |------|------------|
-| Frontend | React (Create React App), Tailwind CSS |
+| Frontend | React 19 (Create React App), Tailwind CSS |
 | Mapas | Leaflet, react-leaflet, leaflet.heat |
 | Gráficas | Recharts |
-| Datos tabulares | Papa Parse (CSV en `public/data/`) |
-| Chat serverless | Netlify Functions (`netlify/functions/chat.js`) |
-| Configuración Netlify | `netlify.toml` → directorio de funciones `netlify/functions` |
+| CSV | Papa Parse (`public/data/`) |
+| API / estáticos | Express (`server.js`) |
+| IA | OpenAI (embeddings `text-embedding-3-small`, chat `gpt-4o-mini`) |
+| RAG (opcional) | Supabase + pgvector (`rag_chunks`, `match_rag_chunks`) |
+| **Plataforma de despliegue** | **[Render](https://render.com)** Web Service Node (`render.yaml`) |
 
-**Archivos principales modificados o añadidos:**
+**Eliminado respecto a versiones anteriores:** `netlify/`, `netlify.toml`, funciones serverless en Netlify. Toda la API vive en `server.js`.
+
+### 2.1 `render.yaml`
+
+| Campo | Valor |
+|-------|--------|
+| `buildCommand` | `npm install --no-audit --no-fund && npm run build` |
+| `startCommand` | `npm start` → `node server.js` |
+| `NODE_VERSION` | `20.18.0` |
+| Variables | `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY` (sync manual en panel Render) |
+
+En producción, Express sirve `build/` y atiende `/api/chat`. No hace falta un servicio estático separado.
+
+### 2.2 Desarrollo local
+
+| Proceso | Comando | Puerto |
+|---------|---------|--------|
+| API + estáticos (modo prod local) | `node server.js` o `npm start` tras `npm run build` | 3001 |
+| Solo frontend CRA | `npm run start:client` | 3000 |
+
+`package.json` define `"proxy": "http://localhost:3001"` para que CRA reenvíe `/api/*` al servidor Node en desarrollo.
+
+Variables: ver `.env.example` (`OPENAI_API_KEY`, `SUPABASE_*`).
+
+---
+
+## 3. Estructura de código relevante
 
 | Ruta | Rol |
 |------|-----|
-| `src/App.jsx` | Orquestación: hooks, mapa, panel, gráfica, chat, contexto para el asistente |
-| `src/hooks/useRainData.js` | Carga y normalización del CSV ancho; acumulados; ET₀ |
-| `src/hooks/useRiskData.js` | Índice base estático + nivel de riesgo combinado |
-| `src/utils/calcEt0Monthly.js` | Cálculo mensual de ET₀ (FAO Penman–Monteith simplificado) |
-| `src/components/MapaET.jsx` | Mapa, capas, heatmap de lluvia, marcadores y tooltips |
-| `src/components/PanelDatos.jsx` | Selectores año/mes y tarjetas de métricas |
-| `src/components/GraficaMensual.jsx` | Series: lluvia, acumulado 7 meses, ET₀ |
-| `netlify/functions/chat.js` | Embedding + chat; system prompt orientado a inundación |
-| `public/data/Evapotranspiracion RP.csv` | Dataset operativo (formato PARAMETRO × meses) |
+| `src/App.jsx` | Hooks, mapa, panel, gráfica, chat, `InfoSheet`, contexto del asistente |
+| `src/hooks/useRainData.js` | Carga CSV, pivote multi-parámetro, acumulados, ET, municipio |
+| `src/hooks/useRiskData.js` | Índice base + `nivel_riesgo` |
+| `src/utils/calcEt0Monthly.js` | Evapotranspiración de referencia (FAO Penman–Monteith mensual) |
+| `src/components/MapaET.jsx` | Mapa lluvia, heatmap, marcadores, tooltip reducido |
+| `src/components/PanelDatos.jsx` | Selectores año/mes y tarjetas |
+| `src/components/GraficaMensual.jsx` | Series con scroll horizontal y tooltip personalizado |
+| `src/components/InfoSheet.jsx` | Sheets visuales: lluvia, riesgo, evapotranspiración |
+| `server.js` | `POST /api/chat`, CORS, RAG, `express.static(build)` |
+| `scripts/rag_index_spatial.js` | Indexación espacial del CSV en Supabase |
+| `supabase/rag.sql` | Esquema vectorial |
+| `public/data/Evapotranspiracion RP.csv` | Dataset operativo |
 
-**Nota:** `src/hooks/useETdata.js` permanece en el repositorio como legado del flujo anterior con `evapotranspiracion_completa.csv`; la aplicación actual usa `useRainData` + `useRiskData`.
-
----
-
-## 3. Formato del dataset y pipeline de datos
-
-### 3.1 Estructura del CSV
-
-El archivo **`public/data/Evapotranspiracion RP.csv`** tiene filas por combinación:
-
-- `PARAMETRO` (código MERRA-2 / similar)
-- `YEAR`, `LAT`, `LON`
-- Valores mensuales en columnas `JAN` … `DEC` (y `ANN`, no usado en el pivote mensual)
-
-### 3.2 Parámetros consumidos en frontend
-
-| PARAMETRO | Uso en la app |
-|-----------|----------------|
-| `PRECTOTCORR` | Precipitación mensual corregida → `lluvia_mm` |
-| `GWETPROF` | Humedad de perfil del suelo (0–1) → panel y tooltip |
-| `T2M` | Temperatura media 2 m (°C) → cálculo ET₀ |
-| `RH2M` | Humedad relativa 2 m (%) → cálculo ET₀ |
-| `ALLSKY_SFC_SW_DWN` | Radiación solar superficial (MJ m⁻² día⁻¹) → ET₀; si falta o es inválida (p. ej. -999), se estima |
-| `PS` | Presión superficial (kPa en el CSV; el código valida rango ~50–115) → ET₀ |
-| `WS10M` | Viento a 10 m (m s⁻¹), convertido a 2 m → ET₀ |
-
-### 3.3 Pivote y clave temporal
-
-`useRainData.js` agrupa por **`lat_lon_year_month`**, fusionando todos los `PARAMETRO` en un único registro mensual por punto.
-
-Ordenación: año, mes, luego coordenadas (para series consistentes por estación).
-
-### 3.4 Acumulados móviles
-
-Sobre la serie **ordenada por tiempo** por cada par `(lat, lon)`:
-
-- **`acumulado_3d_mm`**: suma de los últimos **3 meses** de `lluvia_mm` (etiqueta de producto “72 h” heredada; en datos mensuales representa ventana de **3 meses**).
-- **`acumulado_7d_mm`**: suma de los últimos **7 meses** (análogo: ventana de **7 meses**).
-
-*Recomendación técnica futura:* renombrar en UI a “acumulado 3 meses / 7 meses” o ingestar datos diarios si se requieren ventanas 72 h / 7 días literales.
-
-### 3.5 Municipio mostrado
-
-El CSV no incluye nombre de municipio. Se asigna **`municipio`** por **proximidad a centroides** definidos en `useRainData.js` (lista de municipios de Tabasco). Es una aproximación; para producción conviene capa vectorial oficial o campo `municipio` en el CSV.
+**Legado (no usado en runtime):** `src/hooks/useETdata.js`, referencias a `evapotranspiracion_completa.csv`.
 
 ---
 
-## 4. Cálculo de evapotranspiración de referencia (ET₀)
+## 4. Dataset y pipeline de datos
 
-### 4.1 Implementación
+### 4.1 Archivo y volumen
+
+- **Ruta:** `public/data/Evapotranspiracion RP.csv`
+- **Filas de datos:** ~12 150 (más cabecera)
+- **Horizonte temporal:** años **1981–2025** (por punto y parámetro)
+- **Zona:** grilla sobre Tabasco y puntos costeros adyacentes (coordenadas `LAT`, `LON`)
+
+### 4.2 Formato
+
+Cabecera:
+
+```text
+PARAMETRO,YEAR,LAT,LON,JAN,FEB,MAR,APR,MAY,JUN,JUL,AUG,SEP,OCT,NOV,DEC,ANN
+```
+
+Cada fila es un parámetro MERRA-2 (o equivalente) en un año y celda; los meses son columnas numéricas. `ANN` no participa en el pivote mensual del frontend.
+
+### 4.3 Parámetros presentes en el CSV (10)
+
+| PARAMETRO | Significado |
+|-----------|-------------|
+| `PRECTOTCORR` | Precipitación total corregida (mensual) |
+| `GWETPROF` | Fracción de humedad de perfil |
+| `GWETROOT` | Fracción de humedad en zona radicular |
+| `T2M` | Temperatura del aire a 2 m |
+| `T2MDEW` | Temperatura de punto de rocío a 2 m |
+| `RH2M` | Humedad relativa a 2 m |
+| `QV2M` | Razón de mezcla de vapor |
+| `ALLSKY_SFC_SW_DWN` | Radiación solar superficial (todas las condiciones de cielo) |
+| `PS` | Presión superficial |
+| `WS10M` | Velocidad del viento a 10 m |
+
+Ampliación respecto al MVP inicial: el archivo incorpora variables adicionales (`GWETROOT`, `QV2M`, `T2MDEW`) útiles para futuras mejoras de balance hídrico y humedad.
+
+### 4.4 Parámetros consumidos en frontend (7)
+
+| PARAMETRO | Campo interno | Uso |
+|-----------|---------------|-----|
+| `PRECTOTCORR` | `lluvia_mm` | Mapa, panel, acumulados, riesgo |
+| `GWETPROF` | `gwetprof` | Panel, InfoSheet, contexto chat |
+| `T2M` | `t2m_c` | Cálculo evapotranspiración |
+| `RH2M` | `rh2_pct` | Cálculo evapotranspiración |
+| `ALLSKY_SFC_SW_DWN` | radiación | ET; si inválida (-999), se estima |
+| `PS` | `ps_kpa` | ET (rango validado ~50–115 kPa) |
+| `WS10M` | `ws10_m_s` | ET (convertido a 2 m) |
+
+Implementación del pivote: `useRainData.js` (agrupación por `lat_lon_year_month`).
+
+### 4.5 Carga robusta del CSV
+
+El hook intenta rutas candidatas, por ejemplo:
+
+- `/data/Evapotranspiracion%20RP.csv`
+- `/data/Evapotranspiracion RP.csv`
+
+Validaciones:
+
+1. Respuesta HTTP correcta.
+2. El cuerpo **no** es HTML de fallback (`<!doctype html>`).
+3. Las primeras líneas contienen `PARAMETRO,YEAR,LAT,LON`.
+
+Si ninguna ruta es válida, `loading` termina en `false` y la UI muestra fecha de corte **N/A**.
+
+### 4.6 Acumulados móviles
+
+Por cada par `(lat, lon)`, serie ordenada por año y mes:
+
+| Campo | Cálculo | Nota de producto |
+|-------|---------|------------------|
+| `acumulado_3d_mm` | Suma últimos **3 meses** de `lluvia_mm` | Etiqueta heredada “3d”; en datos mensuales = 3 meses |
+| `acumulado_7d_mm` | Suma últimos **7 meses** | Análogo para “7d” |
+
+### 4.7 Municipio
+
+No viene en el CSV. `useRainData.js` asigna `municipio` por **distancia mínima** a centroides aproximados (lista de municipios de Tabasco y Ciudad del Carmen). Para producción se recomienda capa INEGI o campo explícito en datos.
+
+---
+
+## 5. Evapotranspiración de referencia
 
 **Archivo:** `src/utils/calcEt0Monthly.js`  
-**Función exportada:** `calcEt0Monthly({ latDeg, month, tMeanC, rhPct, rsMjM2Day, psKpa, ws10Ms })`
+**Salida:** `ET_CALCULADA` (mm/día equivalente mensual)
 
-- Base metodológica: **FAO-56 Penman–Monteith** adaptado a **medias mensuales**.
-- **Radiación extraterrestre** `Ra` según latitud y día juliano representativo del mes.
-- **Rs** (radiación de onda corta): si el valor del CSV es válido, se usa; si no, **Rs ≈ 0.45 × Ra** (aproximación para cielo nublado cuando faltan datos o hay sentinela -999).
-- **Viento:** `WS10M` → velocidad a 2 m con factor tipo perfil logarítmico (`u2 ≈ 0.747 × u10`); si falta viento, se usa valor por defecto moderado.
-- **Salida:** `ET_CALCULADA` en **mm día⁻¹** (promedio mensual expresado como tasa diaria equivalente).
+- Metodología: **FAO-56 Penman–Monteith** con medias mensuales.
+- Radiación extraterrestre `Ra` por latitud y día representativo del mes.
+- `Rs` del CSV o, si falta, `Rs ≈ 0.45 × Ra`.
+- Viento: `WS10M` → 2 m (`u2 ≈ 0.747 × u10`).
 
-### 4.2 Integración
-
-Tras el pivote, cada fila mensual recibe **`ET_CALCULADA`** si existen al menos `T2M` y `RH2M`; el resto de variables mejoran la física del término radiativo y aerodinámico.
-
-### 4.3 Visualización
-
-- **Panel:** “ET₀ calculada (FAO Penman–Monteith)”.
-- **Gráfica:** eje derecho, serie `et` (verde).
-- **Mapa:** tooltip con ET₀.
-- **Chat:** línea `ET0 mm/día` en el contexto inyectado.
+**UI:** el término mostrado al usuario es **“Evapotranspiración”** (panel, gráfica, tooltip de mapa, InfoSheet, chat).
 
 ---
 
-## 5. Modelo de riesgo (MVP)
+## 6. Modelo de riesgo (MVP)
 
 **Archivo:** `src/hooks/useRiskData.js`
 
-### 5.1 Componente “estructural” (sintético)
+### 6.1 Componente estructural (sintético)
 
-Por coordenadas se derivan (no vienen del CSV):
+Por coordenadas se derivan aproximaciones de:
 
-- Clase de pendiente aproximada por latitud.
-- Uso de suelo aproximado por longitud.
-- Distancia a río aproximada a partir de `lon`.
-- **`indice_riesgo_base`**: suma de puntajes (compatible con el esquema del README).
+- `pendiente_clase`
+- `uso_suelo`
+- `distancia_rio_m`
+- `indice_riesgo_base` (suma de puntajes)
 
-### 5.2 Nivel de riesgo combinado
+### 6.2 Nivel combinado
 
-Se combinan **`indice_riesgo_base`** con **`acumulado_3d_mm`** y **`acumulado_7d_mm`** mediante umbrales **calibrados para magnitudes mensuales** de precipitación (no para mm en 72 h reales).
+`nivel_riesgo`: **Bajo**, **Medio**, **Alto**, **Muy alto** — función de `indice_riesgo_base`, `acumulado_3d_mm` y `acumulado_7d_mm` con umbrales ajustados a magnitudes **mensuales** de precipitación.
 
-Categorías: **Bajo**, **Medio**, **Alto**, **Muy alto**.
+### 6.3 Dónde se muestra el riesgo
 
-### 5.3 Limitaciones explícitas
-
-- Sin modelado hidráulico ni niveles de río.
-- Umbrales y capas sintéticas deben validarse con expertos locales.
-- El sistema es **apoyo a la decisión**, no alerta oficial.
+- **Panel** e **InfoSheet** (sheet “riesgo”).
+- **Contexto del chat** (`buildContext` en `App.jsx`).
+- **No** en el selector de capas del mapa (el mapa quedó fijado en lluvia).
 
 ---
 
-## 6. Interfaz: mapa, capas y gráfica
+## 7. Interfaz de usuario
 
-### 6.1 Mapa (`MapaET.jsx`)
+### 7.1 Mapa (`MapaET.jsx`)
 
-- **Centrado** según promedio de puntos o valor por defecto en Tabasco.
-- **Capas** (selector en `App.jsx`): `lluvia`, `riesgo`, `historico` (afectan opacidad / heatmap).
-- **Heatmap** (`leaflet.heat`): intensidad ligada a `lluvia_mm` cuando la capa es de lluvia.
-- **Marcadores** circulares con color según **`nivel_riesgo`**.
-- **Tooltip:** lat/lon, lluvia, GWETPROF, ET₀, acumulado 3-meses, riesgo.
+| Aspecto | Comportamiento actual |
+|---------|------------------------|
+| Capa activa | Fija: **`lluvia`** (`activeLayer = "lluvia"` en `App.jsx`; sin selector histórico/riesgo en mapa) |
+| Heatmap | Intensidad = `lluvia_mm` (`leaflet.heat`) |
+| Marcadores | `CircleMarker`; color y radio según umbrales de `lluvia_mm` (≥80, ≥50, ≥25 mm) |
+| Tooltip | **Lat**, **Lon**, **Evapotranspiración** (mm/día) — sin duplicar panel |
+| Punto seleccionado | Radio +2 px |
 
-### 6.2 Gráfica (`GraficaMensual.jsx`)
+### 7.2 Panel (`PanelDatos.jsx`)
 
-- Eje izquierdo: **lluvia** (área + línea) y **acumulado 7 meses** (línea naranja).
-- Eje derecho: **ET₀** (línea verde).
-- Scroll horizontal según longitud de la serie.
+Selectores de año y mes; tarjetas: lluvia, acumulados, GWETPROF, evapotranspiración, bloque de riesgo, municipio.
 
-### 6.3 Panel (`PanelDatos.jsx`)
+### 7.3 Info sheets (`InfoSheet.jsx`)
 
-- Selectores de **año** y **mes** sobre la serie del punto seleccionado.
-- Métricas: lluvia, acumulados, pendiente (sintética), GWETPROF, distancia a río (sintética), ET₀, bloque de **riesgo de inundación** y municipio asignado.
+Tres vistas con barras y badges:
 
----
+1. Sheet **lluvia**
+2. Sheet **riesgo**
+3. Sheet **evapotranspiración**
 
-## 7. Asistente conversacional
+Visible cuando hay `selectedPoint`.
 
-### 7.1 Frontend (`App.jsx`)
+### 7.4 Gráfica (`GraficaMensual.jsx`)
 
-- Construye **`contextoTexto`** con: municipio, fecha, lluvia, ET₀, GWETPROF, acumulados, nivel de riesgo, factores sintéticos y nota legal.
-- **POST** a `/api/chat` con `{ prompt, contextoTexto }`.
-
-### 7.2 API de chat (Render / Node)
-
-1. Genera **embedding** con OpenAI (`text-embedding-3-small`).
-2. Llama a **chat completions** (`gpt-4o-mini`) con **system prompt** orientado a:
-   - Explicación de riesgo hidrometeorológico.
-   - Diferenciación histórico / monitoreo / pronóstico.
-   - Recomendaciones preventivas generales.
-   - Evitar afirmaciones absolutas y recordar límites del dato.
-
-**Requisitos de despliegue:** variable de entorno `OPENAI_API_KEY` en Render.
-
-**Desarrollo local:** ejecutar `node server.js` (API en `http://localhost:3001`) y el frontend con `npm run start:client`. CRA hace proxy de `/api/*` a `http://localhost:3001`.
+- Series: lluvia (área), acumulado 7 meses (línea), evapotranspiración (eje derecho).
+- Ancho mínimo `max(n × 20, 800)` px con **scroll horizontal**.
+- Tooltip compacto: lluvia, acumulado7d, evapotranspiración.
+- Contenedor con `overflow-visible` para no recortar tooltips.
 
 ---
 
-## 8. Cómo ejecutar y construir
+## 8. Asistente conversacional
+
+### 8.1 Frontend
+
+- `buildContext()` inyecta: municipio, fecha, lluvia, evapotranspiración, GWETPROF, acumulados, nivel de riesgo, factores sintéticos, nota legal.
+- `fetch("/api/chat", { prompt, contextoTexto })`.
+
+### 8.2 Backend (`server.js`)
+
+1. Embedding OpenAI del prompt + contexto.
+2. (Opcional) `match_rag_chunks` en Supabase si hay `SUPABASE_URL` y clave (`SUPABASE_SERVICE_ROLE_KEY` o `SUPABASE_ANON_KEY`).
+3. Chat completion con system prompt orientado a riesgo hidrometeorológico y prevención.
+
+**Errores frecuentes en local:** ejecutar solo CRA sin `node server.js` → proxy ECONNREFUSED en `/api/chat`.
+
+---
+
+## 9. RAG espacial
+
+1. Aplicar `supabase/rag.sql` en el proyecto Supabase.
+2. Variables: `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+3. `npm run rag:index:spatial` — lee el mismo CSV, genera embeddings y persiste en `rag_chunks`.
+
+El indexado es **opcional** para arrancar la app; el mapa y el panel funcionan solo con el CSV estático.
+
+---
+
+## 10. Cómo construir y ejecutar
 
 ```bash
 npm install
-npm start          # http://localhost:3000
-npm run build      # salida en build/
+npm run build    # genera build/
+npm start        # Express en PORT (default 3001) sirve build + API
 ```
 
-Datos estáticos: colocar o actualizar **`public/data/Evapotranspiracion RP.csv`**; CRA sirve `public/` en la raíz `/`.
+Solo frontend en desarrollo (con API en paralelo):
+
+```bash
+node server.js          # terminal 1
+npm run start:client    # terminal 2 → http://localhost:3000
+```
+
+Datos: actualizar `public/data/Evapotranspiracion RP.csv`; CRA expone `public/` en la raíz `/`.
 
 ---
 
-## 9. Evolución respecto al HydroFlow original
+## 11. Evolución respecto al HydroFlow original
 
-| Antes (orientación) | Después (Flood Prevention) |
-|---------------------|----------------------------|
-| CSV largo de ET y variables agrometeorológicas por mes (`useETdata` + `evapotranspiracion_completa.csv`) | CSV ancho multi-`PARAMETRO` + `useRainData` |
-| Mapa centrado en heatmap de ET | Mapa con lluvia, riesgo y ET₀ en tooltip |
-| Panel de variables tipo estación meteorológica agrícola | Panel de riesgo, lluvia, GWETPROF, ET₀ |
-| Chat vía URL remota + Supabase + contexto agro | Chat local a Netlify + contexto de inundación |
-| Sin cálculo explícito ET en el nuevo CSV | ET₀ FAO con T2M, RH2M, radiación, PS, WS10M |
+| Antes | Ahora (Flood Prevention) |
+|-------|---------------------------|
+| CSV largo ET + `useETdata` | CSV ancho 10 parámetros + `useRainData` (7 activos) |
+| Netlify Functions para chat | `server.js` en Render |
+| Mapa ET / capas múltiples | Mapa fijo en lluvia + riesgo en panel/sheets |
+| Sin ET₀ en pipeline nuevo | FAO-56 con T2M, RH2M, Rs, PS, WS10M |
+| Pocos parámetros en dataset | + `GWETROOT`, `QV2M`, `T2MDEW` en archivo |
 
 ---
 
-## 10. Próximos pasos técnicos sugeridos
+## 12. Próximos pasos técnicos
 
-1. **Datos:** archivo `lluvia_diaria.csv` y `riesgo_static.csv` según README, con columnas explícitas de municipio.
-2. **Coherencia temporal:** renombrar o recalcular acumulados si el negocio exige 24 h / 72 h / 7 d reales.
-3. **Riesgo:** sustituir reglas sintéticas por capas geoespaciales reales (DEM, uso de suelo, distancia a cauces).
-4. **ET:** validar ET₀ mensual frente a estaciones o a `ET_CALCULADA` del pipeline anterior.
-5. **Desarrollo:** documentar uso de `netlify dev` para probar el chat en local.
+1. Ingestar `lluvia_diaria.csv` y `riesgo_static.csv` con municipio explícito (ver README).
+2. Renombrar acumulados en UI o pasar a series diarias/horarias.
+3. Sustituir riesgo sintético por DEM, uso de suelo y distancia real a cauces.
+4. Exponer `GWETROOT`, `QV2M`, `T2MDEW` en panel o modelo de saturación.
+5. Calibrar umbrales de riesgo con eventos históricos y expertos locales.
+6. Pronóstico 24–72 h e integración con fuentes oficiales.
 
 ---
 
