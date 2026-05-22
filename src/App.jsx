@@ -5,10 +5,13 @@ import MapaET from "./components/MapaET";
 import GraficaMensual from "./components/GraficaMensual";
 import PanelDatos from "./components/PanelDatos";
 import InfoSheet from "./components/InfoSheet";
+import PronosticoSmn from "./components/PronosticoSmn";
+import useSmnForecast from "./hooks/useSmnForecast";
+import { matchSmnMunicipio } from "./utils/matchSmnMunicipio";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import "./index.css";
-import { CloudRain, MessageCircle, X, Send, Bot, Info } from "lucide-react";
+import { CloudRain, MessageCircle, X, Send, Bot, Info, Map as MapIcon, CalendarDays } from "lucide-react";
 
 export default function App() {
   const [isSearching, setIsSearching] = useState(false);
@@ -18,7 +21,9 @@ export default function App() {
   const [selectedYear, setSelectedYear] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(null);
   const activeLayer = "lluvia";
+  const [mainView, setMainView] = useState("monitor");
   const [showInfo, setShowInfo] = useState(false);
+  const smnForecast = useSmnForecast();
 
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [messages, setMessages] = useState([
@@ -61,9 +66,9 @@ export default function App() {
 
   const buildContext = useCallback(() => {
     if (!selectedPoint) return "No hay punto seleccionado en este momento.";
-    return [
+    const lines = [
       `Municipio: ${selectedPoint.municipio || "Tabasco"}`,
-      `Fecha: ${selectedPoint.fecha}`,
+      `Fecha (dataset histórico): ${selectedPoint.fecha}`,
       `Lluvia mm: ${Number(selectedPoint.lluvia_mm || 0).toFixed(2)}`,
       `Evapotranspiración mm/día: ${Number.isFinite(Number(selectedPoint.ET_CALCULADA)) ? Number(selectedPoint.ET_CALCULADA).toFixed(2) : "N/A"}`,
       `GWETPROF: ${Number.isFinite(Number(selectedPoint.gwetprof)) ? Number(selectedPoint.gwetprof).toFixed(2) : "N/A"}`,
@@ -73,9 +78,27 @@ export default function App() {
       `Pendiente: ${selectedPoint.pendiente_clase || "N/A"}`,
       `Uso de suelo: ${selectedPoint.uso_suelo || "N/A"}`,
       `Distancia a rio m: ${selectedPoint.distancia_rio_m ?? "N/A"}`,
-      "Nota: Es un sistema de apoyo, no reemplaza alertas oficiales.",
-    ].join("\n");
-  }, [selectedPoint]);
+    ];
+
+    const smnMun = matchSmnMunicipio(
+      selectedPoint.municipio,
+      smnForecast.municipalities
+    );
+    if (smnMun?.days?.length) {
+      lines.push("--- Pronóstico SMN (3 días, fuente independiente del CSV) ---");
+      smnMun.days.forEach((d) => {
+        lines.push(
+          `Día +${d.ndia}: prec ${d.prec?.toFixed(1)} mm, prob ${d.probprec}%, tmax ${d.tmax}°C, tmin ${d.tmin}°C`
+        );
+      });
+      lines.push(`Acumulado pronosticado 3d: ${smnMun.precTotal3d?.toFixed(1)} mm`);
+    } else if (smnForecast.data) {
+      lines.push("Pronóstico SMN: sin coincidencia de municipio para este punto.");
+    }
+
+    lines.push("Nota: Es un sistema de apoyo, no reemplaza alertas oficiales.");
+    return lines.join("\n");
+  }, [selectedPoint, smnForecast.municipalities, smnForecast.data]);
 
   const handleSendMessage = async () => {
     if (!input.trim()) return;
@@ -406,29 +429,70 @@ className="bg-blue-600 p-2 rounded-lg"
 )}
 
 
-{/* MAPA + GRÁFICA */}
+{/* MAPA + GRÁFICA / PRONÓSTICO SMN */}
 <div className="
 order-1
 lg:order-2
-flex flex-col gap-6 min-w-0 min-h-0
+flex flex-col gap-4 min-w-0 min-h-0
 ">
 
-  <div className="h-[55vh] lg:flex-[1.5] lg:h-auto dashboard-card overflow-hidden">
-    {loading
-      ? <div className="p-6">Cargando mapa de riesgo...</div>
-      : <MapaET
-          puntosRaw={mapPoints}
-          onPointClick={handlePointClick}
-          selectedCoords={selectedPoint ? { lat: selectedPoint.lat, lon: selectedPoint.lon } : null}
-        />
-    }
+  <div className="flex gap-2 p-1 rounded-xl bg-slate-900/80 border border-slate-800 shrink-0">
+    <button
+      type="button"
+      onClick={() => setMainView("monitor")}
+      className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition ${
+        mainView === "monitor"
+          ? "bg-blue-600/30 text-blue-200 border border-blue-500/40"
+          : "text-slate-400 hover:text-slate-200"
+      }`}
+    >
+      <MapIcon size={16} />
+      Monitoreo histórico
+    </button>
+    <button
+      type="button"
+      onClick={() => setMainView("forecast")}
+      className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition ${
+        mainView === "forecast"
+          ? "bg-cyan-600/25 text-cyan-200 border border-cyan-500/40"
+          : "text-slate-400 hover:text-slate-200"
+      }`}
+    >
+      <CalendarDays size={16} />
+      Pronóstico SMN
+    </button>
   </div>
 
-  <div className="h-[30vh] lg:flex-[1] lg:h-auto min-w-0 dashboard-card overflow-visible">
-    <GraficaMensual series={seriesForPlot}/>
-  </div>
+  {mainView === "monitor" ? (
+    <>
+      <div className="h-[55vh] lg:flex-[1.5] lg:h-auto dashboard-card overflow-hidden">
+        {loading
+          ? <div className="p-6">Cargando mapa de riesgo...</div>
+          : <MapaET
+              puntosRaw={mapPoints}
+              onPointClick={handlePointClick}
+              selectedCoords={selectedPoint ? { lat: selectedPoint.lat, lon: selectedPoint.lon } : null}
+            />
+        }
+      </div>
 
-  <InfoSheet selectedPoint={selectedPoint} activeLayer={activeLayer} />
+      <div className="h-[30vh] lg:flex-[1] lg:h-auto min-w-0 dashboard-card overflow-visible">
+        <GraficaMensual series={seriesForPlot}/>
+      </div>
+
+      <InfoSheet selectedPoint={selectedPoint} activeLayer={activeLayer} />
+    </>
+  ) : (
+    <div className="flex-1 min-h-[50vh] lg:min-h-0 dashboard-card overflow-hidden">
+      <PronosticoSmn
+        linkedMunicipio={selectedPoint?.municipio}
+        data={smnForecast.data}
+        loading={smnForecast.loading}
+        error={smnForecast.error}
+        reload={smnForecast.reload}
+      />
+    </div>
+  )}
 
 </div>
 

@@ -1,6 +1,7 @@
 const express = require("express");
 const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
+const { fetchTabascoForecast } = require("./lib/smnForecast");
 
 const app = express();
 
@@ -158,6 +159,26 @@ ${contextoTexto || ""}${ragBlock}`,
     });
   } catch (error) {
     res.set(corsHeaders).status(500).json({ error: error?.message || "Error interno" });
+  }
+});
+
+const apiJsonHeaders = {
+  ...corsHeaders,
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+};
+
+app.options("/api/forecast/tabasco", (_req, res) => {
+  res.set(apiJsonHeaders).status(200).send("");
+});
+
+app.get("/api/forecast/tabasco", async (_req, res) => {
+  try {
+    const payload = await fetchTabascoForecast();
+    res.set(apiJsonHeaders).status(200).json(payload);
+  } catch (error) {
+    res.set(apiJsonHeaders).status(502).json({
+      error: error?.message || "No se pudo obtener el pronóstico SMN",
+    });
   }
 });
 
