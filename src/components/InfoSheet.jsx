@@ -255,7 +255,7 @@ export default function InfoSheet({ selectedPoint, activeLayer }) {
               color="bg-emerald-500"
             />
             <MetricCard
-              label="GWETPROF"
+              label="Humedad de perfil del suelo"
               value={formatNum(selectedPoint.gwetprof)}
               unit=""
               progress={Number(selectedPoint.gwetprof || 0)}
