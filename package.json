@@ -33,7 +33,7 @@
   "scripts": {
     "start": "node server.js",
     "start:client": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "react-scripts build && node scripts/cache_smn_tabasco.js",
     "rag:index:spatial": "node scripts/rag_index_spatial.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

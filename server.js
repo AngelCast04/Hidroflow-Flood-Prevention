@@ -1,7 +1,7 @@
 const express = require("express");
 const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
-const { fetchTabascoForecast } = require("./lib/smnForecast");
+const { fetchTabascoForecast, warmSmnCache } = require("./lib/smnForecast");
 
 const app = express();
 
@@ -193,5 +193,6 @@ app.get("*", (req, res) => {
 const port = Number(process.env.PORT) || 3001;
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
+  warmSmnCache();
 });
 
