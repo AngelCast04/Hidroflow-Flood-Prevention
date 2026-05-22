@@ -69,9 +69,11 @@ export default function PronosticoSmn({
     return (
       <div className="p-6 space-y-3">
         <p className="text-red-300 text-sm">{error}</p>
-        <p className="text-slate-500 text-xs">
-          En desarrollo ejecuta <code className="text-blue-300">node server.js</code> antes del
-          frontend. El proxy evita CORS y descomprime el GZip del SMN.
+        <p className="text-slate-500 text-xs leading-relaxed">
+          El pronóstico se obtiene en el servidor (<code className="text-blue-300">/api/forecast/tabasco</code>
+          ). En Render el servicio debe usar <code className="text-blue-300">npm start</code> (no solo
+          sitio estático). En local: <code className="text-blue-300">node server.js</code> y luego{" "}
+          <code className="text-blue-300">npm run start:client</code>.
         </p>
         <button
           type="button"
@@ -107,6 +109,16 @@ export default function PronosticoSmn({
           Actualizar
         </button>
       </div>
+
+      <p className="text-xs text-slate-400 leading-relaxed">
+        Complementa el monitoreo histórico (MERRA-2) con pronóstico municipal SMN (~72 h).
+      </p>
+
+      {data?.warning && (
+        <p className="text-xs text-amber-300/90 bg-amber-950/30 border border-amber-700/40 rounded-lg p-2">
+          {data.warning}
+        </p>
+      )}
 
       {linkedMunicipio && (
         <p className="text-xs text-cyan-400/90">

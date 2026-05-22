@@ -10,7 +10,17 @@ export default function useSmnForecast() {
     setError(null);
     try {
       const res = await fetch("/api/forecast/tabasco", { cache: "no-store" });
-      const body = await res.json();
+      const text = await res.text();
+      let body;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        throw new Error(
+          res.ok
+            ? "Respuesta inválida del servidor"
+            : "El servidor no expuso /api/forecast (¿solo frontend en Render? Usa npm start)."
+        );
+      }
       if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
       setData(body);
     } catch (e) {
