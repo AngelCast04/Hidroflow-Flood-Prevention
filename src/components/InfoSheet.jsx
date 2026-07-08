@@ -73,9 +73,7 @@ export default function InfoSheet({ selectedPoint, activeLayer }) {
     const current = Number(selectedPoint.lluvia_mm || 0);
     const anomaly = avg > 0 ? ((current - avg) / avg) * 100 : 0;
 
-    const idx = series.findIndex(
-      (s) => Number(s.YEAR) === Number(selectedPoint.YEAR) && Number(s.Month) === month
-    );
+    const idx = series.findIndex((s) => s.fecha === selectedPoint.fecha);
     const prev = idx > 0 ? Number(series[idx - 1].lluvia_mm || 0) : null;
     const trend =
       prev == null
@@ -95,10 +93,10 @@ export default function InfoSheet({ selectedPoint, activeLayer }) {
     const et = Number(selectedPoint.ET_CALCULADA);
     if (!Number.isFinite(et)) return { balance: null, lectura: "Evapotranspiración no disponible" };
 
-    const balance = lluvia - et * 30;
+    const balance = lluvia - et;
     let lectura = "Balance intermedio";
-    if (balance >= 40) lectura = "Exceso hídrico (posible saturación)";
-    else if (balance <= -20) lectura = "Déficit hídrico";
+    if (balance >= 15) lectura = "Exceso hídrico (posible saturación)";
+    else if (balance <= -3) lectura = "Déficit hídrico";
 
     return { balance, lectura };
   }, [selectedPoint]);
@@ -159,8 +157,8 @@ export default function InfoSheet({ selectedPoint, activeLayer }) {
             <MetricCard
               label="Lluvia actual"
               value={formatNum(selectedPoint.lluvia_mm)}
-              unit="mm"
-              progress={(Number(selectedPoint.lluvia_mm || 0)) / 120}
+              unit="mm/día"
+              progress={(Number(selectedPoint.lluvia_mm || 0)) / 50}
               color="bg-sky-500"
             />
             <MetricCard
@@ -180,8 +178,8 @@ export default function InfoSheet({ selectedPoint, activeLayer }) {
             <MetricCard
               label="Media histórica (mes)"
               value={formatNum(rainStats?.avg)}
-              unit="mm"
-              progress={(Number(rainStats?.avg || 0)) / 120}
+              unit="mm/día"
+              progress={(Number(rainStats?.avg || 0)) / 20}
               color="bg-emerald-500"
             />
           </div>
@@ -266,7 +264,7 @@ export default function InfoSheet({ selectedPoint, activeLayer }) {
           <div className="bg-slate-950/60 rounded p-2 space-y-1">
             <div className="flex items-center justify-between">
               <span>Balance lluvia - evapotranspiración</span>
-              <span className="text-white font-medium">{formatNum(etStats?.balance)} mm/mes</span>
+              <span className="text-white font-medium">{formatNum(etStats?.balance)} mm/día</span>
             </div>
             <div className="h-2 bg-slate-800 rounded overflow-hidden">
               <div

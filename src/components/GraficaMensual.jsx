@@ -16,7 +16,7 @@ function TooltipInfo({ active, label, payload }) {
   return (
     <div className="bg-white/95 text-slate-800 rounded-md shadow-lg px-3 py-2 text-xs leading-tight min-w-[210px]">
       <div className="font-semibold text-sm mb-1">{label}</div>
-      <div className="text-sky-600 font-medium">lluvia : {lluvia == null ? "N/A" : `${lluvia.toFixed(2)} mm`}</div>
+      <div className="text-sky-600 font-medium">lluvia : {lluvia == null ? "N/A" : `${lluvia.toFixed(2)} mm/día`}</div>
       <div className="text-orange-600 font-medium">
         acumulado7d : {acumulado7d == null ? "N/A" : `${acumulado7d.toFixed(2)} mm`}
       </div>
@@ -36,11 +36,13 @@ export default function GraficaMensual({ series }) {
     );
 
   // Volvemos al ancho extendido original para que la serie no se comprima.
-  const chartWidth = Math.max(series.length * 20, 800);
+  const chartWidth = Math.max(series.length * 4, 800);
 
   return (
     <div className="w-full h-full p-4 flex flex-col bg-gradient-to-b from-slate-900/80 to-slate-900/40 rounded-2xl">
-      <h3 className="text-base font-semibold mb-2">Lluvia, acumulado 7 meses y Evapotranspiración</h3>
+      <h3 className="text-base font-semibold mb-2">
+        Serie diaria {series[0]?.YEAR || ""} — lluvia, acumulado 7 días y evapotranspiración
+      </h3>
 
       <div className="flex-1 w-full overflow-x-auto overflow-y-visible scroll-minimal">
         <div style={{ width: chartWidth }} className="h-full">

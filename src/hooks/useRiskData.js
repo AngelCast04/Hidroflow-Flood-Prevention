@@ -33,37 +33,32 @@ function baseRiskIndex(lat, lon) {
 }
 
 function riskLevel(indiceBase, acu3, acu7) {
-  // Ajuste de umbrales para series mensuales PRECTOTCORR.
-  if (acu7 > 90 || acu3 > 45 || indiceBase >= 7) return "Muy alto";
-  if (acu3 > 30 || acu7 > 65 || indiceBase >= 5) return "Alto";
-  if (acu3 > 15 || acu7 > 40 || indiceBase >= 3) return "Medio";
+  // Umbrales para acumulados diarios (3 y 7 días), alineados con ventana SMN.
+  if (acu7 > 200 || acu3 > 80 || indiceBase >= 7) return "Muy alto";
+  if (acu3 > 50 || acu7 > 140 || indiceBase >= 5) return "Alto";
+  if (acu3 > 25 || acu7 > 80 || indiceBase >= 3) return "Medio";
   return "Bajo";
 }
 
-export default function useRiskData(rainData) {
-  const data = useMemo(() => {
-    return (rainData || []).map((row) => {
-      const staticRisk = baseRiskIndex(row.lat, row.lon);
-      const nivel_riesgo = riskLevel(
-        staticRisk.indice_riesgo_base,
-        Number(row.acumulado_3d_mm || 0),
-        Number(row.acumulado_7d_mm || 0)
-      );
+export function enrichRowsWithRisk(rows) {
+  return (rows || []).map((row) => {
+    const staticRisk = baseRiskIndex(row.lat, row.lon);
+    const nivel_riesgo = riskLevel(
+      staticRisk.indice_riesgo_base,
+      Number(row.acumulado_3d_mm || 0),
+      Number(row.acumulado_7d_mm || 0)
+    );
 
-      return {
-        fecha: row.fecha,
-        lat: row.lat,
-        lon: row.lon,
-        municipio: row.municipio,
-        ...staticRisk,
-        acumulado_3d_mm: row.acumulado_3d_mm,
-        acumulado_7d_mm: row.acumulado_7d_mm,
-        gwetprof: row.gwetprof,
-        ET_CALCULADA: row.ET_CALCULADA,
-        nivel_riesgo,
-      };
-    });
-  }, [rainData]);
+    return {
+      ...row,
+      ...staticRisk,
+      nivel_riesgo,
+    };
+  });
+}
+
+export default function useRiskData(rainData) {
+  const data = useMemo(() => enrichRowsWithRisk(rainData), [rainData]);
 
   return { data };
 }

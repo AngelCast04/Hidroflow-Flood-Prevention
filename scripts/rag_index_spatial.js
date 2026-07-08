@@ -40,20 +40,8 @@ const MUNICIPALITY_CENTROIDS = [
   { name: "Comalcalco", lat: 18.2637, lon: -93.221 },
   { name: "Cunduacán", lat: 18.0655, lon: -93.1738 },
   { name: "Huimanguillo", lat: 17.8374, lon: -93.3839 },
-  { name: "Jalpa de Méndez", lat: 18.1763, lon: -93.0633 },
-  { name: "Nacajuca", lat: 18.1719, lon: -92.9932 },
   { name: "Paraíso", lat: 18.3969, lon: -93.2147 },
-  { name: "Teapa", lat: 17.5492, lon: -92.9512 },
-  { name: "Macuspana", lat: 17.7569, lon: -92.5926 },
-  { name: "Jalapa", lat: 17.7214, lon: -92.8063 },
-  { name: "Tacotalpa", lat: 17.6072, lon: -92.8262 },
-  { name: "Balancán", lat: 17.8064, lon: -91.1823 },
-  { name: "Tenosique", lat: 17.4784, lon: -91.4328 },
-  { name: "Catazajá", lat: 17.734, lon: -92.014 },
-  { name: "Emiliano Zapata", lat: 17.7425, lon: -91.7656 },
-  { name: "Centla (Frontera)", lat: 18.5917, lon: -92.6486 },
-  { name: "Jonuta", lat: 17.9833, lon: -92.1333 },
-  { name: "Ciudad del Carmen", lat: 18.6508, lon: -91.8297 },
+
 ];
 
 function distanceKm(lat1, lon1, lat2, lon2) {

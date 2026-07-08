@@ -16,7 +16,7 @@ const MESES = [
   { value: 12, label: "DIC" }
 ];
 
-export default function PanelDatos({ selectedPoint, selectedYear, selectedMonth, onChangeDate }) {
+export default function PanelDatos({ selectedPoint, selectedYear, selectedMonth, selectedDay, onChangeDate }) {
 
   // ✅ series estable
   const series = useMemo(() => {
@@ -28,7 +28,6 @@ export default function PanelDatos({ selectedPoint, selectedYear, selectedMonth,
     return [...new Set(series.map(s => s.YEAR))].sort((a, b) => b - a);
   }, [series]);
 
-  // 🔹 Meses disponibles para el año seleccionado
   const months = useMemo(() => {
     const mesesDisponibles = series
       .filter(s => s.YEAR === selectedYear)
@@ -36,6 +35,14 @@ export default function PanelDatos({ selectedPoint, selectedYear, selectedMonth,
 
     return MESES.filter(m => mesesDisponibles.includes(m.value));
   }, [series, selectedYear]);
+
+  const days = useMemo(() => {
+    return [...new Set(
+      series
+        .filter(s => s.YEAR === selectedYear && s.Month === selectedMonth)
+        .map(s => s.Day)
+    )].sort((a, b) => a - b);
+  }, [series, selectedYear, selectedMonth]);
 
   const riskColor =
     selectedPoint?.nivel_riesgo === "Muy alto"
@@ -49,15 +56,14 @@ export default function PanelDatos({ selectedPoint, selectedYear, selectedMonth,
   return (
     <div className="p-5 space-y-5 lg:h-full lg:overflow-y-auto scroll-minimal">
 
-      {/* SELECTORES */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div>
           <label className="text-xs text-gray-400">Año</label>
           <select
             className="block mt-1 w-full p-2 rounded bg-slate-950 border border-slate-700 text-gray-200"
             value={selectedYear}
             onChange={(e) =>
-              onChangeDate(Number(e.target.value), selectedMonth)
+              onChangeDate(Number(e.target.value), selectedMonth, selectedDay)
             }
           >
             {years.map(y => (
@@ -69,10 +75,10 @@ export default function PanelDatos({ selectedPoint, selectedYear, selectedMonth,
         <div>
           <label className="text-xs text-gray-400">Mes</label>
           <select
-            className="block mt-1 w-full p-2 rounded bg-slate-950 border border-slate-700 text-gray-200 mb-4"
+            className="block mt-1 w-full p-2 rounded bg-slate-950 border border-slate-700 text-gray-200"
             value={selectedMonth}
             onChange={(e) =>
-              onChangeDate(selectedYear, Number(e.target.value))
+              onChangeDate(selectedYear, Number(e.target.value), selectedDay)
             }
           >
             {months.map(m => (
@@ -82,15 +88,34 @@ export default function PanelDatos({ selectedPoint, selectedYear, selectedMonth,
             ))}
           </select>
         </div>
+
+        <div>
+          <label className="text-xs text-gray-400">Día</label>
+          <select
+            className="block mt-1 w-full p-2 rounded bg-slate-950 border border-slate-700 text-gray-200 mb-4"
+            value={selectedDay}
+            onChange={(e) =>
+              onChangeDate(selectedYear, selectedMonth, Number(e.target.value))
+            }
+          >
+            {days.map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </div>
       </div>
+
+      <p className="text-[10px] text-slate-500 -mt-2">
+        Fecha: {selectedPoint.fecha || "N/A"} · Serie diaria MERRA-2
+      </p>
 
       {/* DATOS */}
       <div className="grid grid-cols-2 gap-4 text-sm">
         <Dato
           icon={CloudRain}
-          label="Lluvia estimada"
+          label="Lluvia del día"
           valor={Number(selectedPoint.lluvia_mm || 0).toFixed(2)}
-          unidad="mm"
+          unidad="mm/día"
         />
 
         <Dato

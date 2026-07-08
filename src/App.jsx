@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import useRainData from "./hooks/useRainData";
-import useRiskData from "./hooks/useRiskData";
+import useRiskData, { enrichRowsWithRisk } from "./hooks/useRiskData";
 import MapaET from "./components/MapaET";
 import GraficaMensual from "./components/GraficaMensual";
 import PanelDatos from "./components/PanelDatos";
@@ -15,11 +15,12 @@ import { CloudRain, MessageCircle, X, Send, Bot, Info, Map as MapIcon, CalendarD
 
 export default function App() {
   const [isSearching, setIsSearching] = useState(false);
-  const { data: rainData, loading, latestDate } = useRainData();
+  const { data: rainData, loading, loadError, latestDate, getPointSeries } = useRainData();
   const { data: riskData } = useRiskData(rainData);
   const [selectedPoint, setSelectedPoint] = useState(null);
   const [selectedYear, setSelectedYear] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(null);
+  const [selectedDay, setSelectedDay] = useState(null);
   const activeLayer = "lluvia";
   const [mainView, setMainView] = useState("monitor");
   const [showInfo, setShowInfo] = useState(false);
@@ -40,29 +41,40 @@ export default function App() {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const dataByPoint = useMemo(() => {
-    const map = new Map();
-    rainData.forEach((row) => {
-      const key = `${row.lat}_${row.lon}`;
-      const risk = riskData.find(
-        (item) => item.lat === row.lat && item.lon === row.lon && item.fecha === row.fecha
-      );
-      const merged = { ...row, ...(risk || {}) };
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(merged);
-    });
-    for (const items of map.values()) {
-      items.sort((a, b) => a.YEAR - b.YEAR || a.Month - b.Month);
-    }
-    return map;
-  }, [rainData, riskData]);
-
   const mapPoints = useMemo(() => {
-    const selectedDate = latestDate;
-    return Array.from(dataByPoint.values())
-      .map((items) => items.find((it) => it.fecha === selectedDate) || items[items.length - 1])
-      .filter(Boolean);
-  }, [dataByPoint, latestDate]);
+    return riskData.map((row) => ({ ...row }));
+  }, [riskData]);
+
+  const handlePointClick = (p) => {
+    if (!p) return;
+    const series = enrichRowsWithRisk(getPointSeries(p.lat, p.lon))
+      .map((it) => ({
+        ...it,
+        YEAR: Number(it.YEAR),
+        Month: Number(it.Month),
+        Day: Number(it.Day),
+      }))
+      .sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+    const latest = series[series.length - 1];
+    let year = selectedYear ?? latest?.YEAR;
+    let month = selectedMonth ?? latest?.Month;
+    let day = selectedDay ?? latest?.Day;
+
+    let found = series.find((s) => s.YEAR === year && s.Month === month && s.Day === day);
+
+    if (!found) {
+      found = latest;
+      year = found?.YEAR;
+      month = found?.Month;
+      day = found?.Day;
+    }
+
+    setSelectedYear(year);
+    setSelectedMonth(month);
+    setSelectedDay(day);
+    setSelectedPoint({ ...found, lat: p.lat, lon: p.lon, series });
+  };
 
   const buildContext = useCallback(() => {
     if (!selectedPoint) return "No hay punto seleccionado en este momento.";
@@ -128,55 +140,37 @@ export default function App() {
     }
   };
 
-  const handlePointClick = (p) => {
-    if (!p) return;
-    const series = (dataByPoint.get(`${p.lat}_${p.lon}`) || [])
-      .map((it) => ({ ...it, YEAR: Number(it.YEAR), Month: Number(it.Month) }))
-      .sort((a, b) => a.YEAR - b.YEAR || a.Month - b.Month);
-
-    // 2. Buscamos el año más alto para la selección inicial
-    // Usamos Math.max para no depender del orden del array
-    const maxYear = Math.max(...series.map((s) => s.YEAR));
-    const seriesDelMaxAno = series.filter((s) => s.YEAR === maxYear);
-    const minMonth = Math.min(...seriesDelMaxAno.map((s) => s.Month));
-
-    let year = selectedYear ?? maxYear;
-    let month = selectedMonth ?? minMonth;
-    
-    let found = series.find((s) => s.YEAR === year && s.Month === month);
-
-    if (!found) { 
-      found = seriesDelMaxAno[0] || series[series.length - 1];
-      year = found?.YEAR; 
-      month = found?.Month; 
-    }
-
-    setSelectedYear(year);
-    setSelectedMonth(month);
-    setSelectedPoint({ ...found, lat: p.lat, lon: p.lon, series });
-  };
-
-  const handleChangeDate = useCallback((year, month) => {
+  const handleChangeDate = useCallback((year, month, day) => {
     if (!selectedPoint?.series) return;
-    const found = selectedPoint.series.find((s) => s.YEAR === year && s.Month === month);
+    let found = selectedPoint.series.find(
+      (s) => s.YEAR === year && s.Month === month && s.Day === day
+    );
+    if (!found) {
+      found = selectedPoint.series.find((s) => s.YEAR === year && s.Month === month);
+    }
     if (!found) return;
-    setSelectedYear(year);
-    setSelectedMonth(month);
+    setSelectedYear(found.YEAR);
+    setSelectedMonth(found.Month);
+    setSelectedDay(found.Day);
     setSelectedPoint((prev) => ({ ...found, lat: prev.lat, lon: prev.lon, series: prev.series }));
   }, [selectedPoint]);
 
   const seriesForPlot = useMemo(() => {
     if (!selectedPoint?.series) return [];
-    return selectedPoint.series.map((s) => ({
-      YEAR: s.YEAR,
-      Month: s.Month,
-      Mes: s.Mes,
-      lluvia: Number(s.lluvia_mm || 0),
-      acumulado7d: Number(s.acumulado_7d_mm || 0),
-      et: Number.isFinite(Number(s.ET_CALCULADA)) ? Number(s.ET_CALCULADA) : null,
-      label: `${s.YEAR}-${s.Mes}`,
-    }));
-  }, [selectedPoint]);
+    const year = selectedYear ?? selectedPoint.YEAR;
+    return selectedPoint.series
+      .filter((s) => s.YEAR === year)
+      .map((s) => ({
+        YEAR: s.YEAR,
+        Month: s.Month,
+        Day: s.Day,
+        Mes: s.Mes,
+        lluvia: Number(s.lluvia_mm || 0),
+        acumulado7d: Number(s.acumulado_7d_mm || 0),
+        et: Number.isFinite(Number(s.ET_CALCULADA)) ? Number(s.ET_CALCULADA) : null,
+        label: `${s.Day}/${s.Mes}`,
+      }));
+  }, [selectedPoint, selectedYear]);
 
   return (
 <div className="min-h-screen lg:h-screen flex flex-col lg:overflow-hidden">
@@ -465,10 +459,22 @@ flex flex-col gap-4 min-w-0 min-h-0
 
   {mainView === "monitor" ? (
     <>
+      {!loading && !loadError && latestDate && (
+        <p className="text-xs text-slate-500 shrink-0">
+          Última fecha en dataset: <span className="text-slate-300">{latestDate}</span> · {mapPoints.length} puntos
+        </p>
+      )}
       <div className="h-[55vh] lg:flex-[1.5] lg:h-auto dashboard-card overflow-hidden">
         {loading
-          ? <div className="p-6">Cargando mapa de riesgo...</div>
-          : <MapaET
+          ? <div className="p-6 text-slate-300 text-sm animate-pulse">Cargando dataset diario (~83k registros)…</div>
+          : loadError
+            ? <div className="p-6 text-red-300 text-sm space-y-2">
+                <p>{loadError}</p>
+                <p className="text-slate-500 text-xs">Asegúrate de tener <code className="text-blue-300">public/data/DATASET_UPDATE.csv</code> y recarga la página.</p>
+              </div>
+            : mapPoints.length === 0
+              ? <div className="p-6 text-amber-300 text-sm">No hay puntos para mostrar en el mapa.</div>
+              : <MapaET
               puntosRaw={mapPoints}
               onPointClick={handlePointClick}
               selectedCoords={selectedPoint ? { lat: selectedPoint.lat, lon: selectedPoint.lon } : null}
@@ -509,6 +515,7 @@ dashboard-card overflow-hidden
     selectedPoint={selectedPoint}
     selectedYear={selectedYear}
     selectedMonth={selectedMonth}
+    selectedDay={selectedDay}
     onChangeDate={handleChangeDate}
   />
 ) : (

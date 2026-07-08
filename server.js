@@ -182,8 +182,11 @@ app.get("/api/forecast/tabasco", async (_req, res) => {
   }
 });
 
-// Producción: servir el build de CRA
+// Producción: servir el build de CRA y respaldo de datos en public/
 const buildDir = path.join(__dirname, "build");
+const publicDataDir = path.join(__dirname, "public", "data");
+
+app.use("/data", express.static(publicDataDir));
 app.use(express.static(buildDir));
 
 app.get("*", (req, res) => {

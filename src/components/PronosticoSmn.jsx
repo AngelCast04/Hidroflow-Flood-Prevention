@@ -9,7 +9,43 @@ import {
 } from "lucide-react";
 import { matchSmnMunicipio, forecastAdvisory } from "../utils/matchSmnMunicipio";
 
-const DAY_LABELS = ["Hoy", "Mañana", "Pasado mañana"];
+function parseSmnDloc(dloc) {
+  if (!dloc || typeof dloc !== "string") return null;
+  const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2}))?/.exec(dloc);
+  if (!m) return null;
+  const [, y, mo, d, h = "0"] = m;
+  const date = new Date(Number(y), Number(mo) - 1, Number(d), Number(h));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function startOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function diffDays(date, today) {
+  return Math.round(
+    (startOfDay(date).getTime() - startOfDay(today).getTime()) /
+      (1000 * 60 * 60 * 24)
+  );
+}
+
+function relativeDayLabel(offset) {
+  if (offset === 0) return "Hoy";
+  if (offset === 1) return "Mañana";
+  if (offset === 2) return "Pasado mañana";
+  if (offset > 2) return `En ${offset} días`;
+  if (offset === -1) return "Ayer";
+  return `Hace ${-offset} días`;
+}
+
+function formatLongDate(date) {
+  if (!date) return "";
+  return date.toLocaleDateString("es-MX", {
+    weekday: "long",
+    day: "2-digit",
+    month: "short",
+  });
+}
 
 function advisoryTone(level) {
   if (level === "high") return "border-red-500/40 bg-red-950/30 text-red-200";
@@ -49,6 +85,32 @@ export default function PronosticoSmn({
   );
 
   const advisory = useMemo(() => forecastAdvisory(selected), [selected]);
+
+  const today = useMemo(() => startOfDay(new Date()), []);
+
+  const enrichedDays = useMemo(() => {
+    if (!selected?.days?.length) return [];
+    return selected.days
+      .map((day) => {
+        const date = parseSmnDloc(day.dloc);
+        const offset = date ? diffDays(date, today) : null;
+        return { ...day, date, offset };
+      })
+      .sort((a, b) => {
+        if (a.date && b.date) return a.date - b.date;
+        return (a.ndia ?? 0) - (b.ndia ?? 0);
+      });
+  }, [selected, today]);
+
+  const upcomingDays = useMemo(
+    () => enrichedDays.filter((d) => d.offset == null || d.offset >= 0),
+    [enrichedDays]
+  );
+
+  const displayDays = upcomingDays.length > 0 ? upcomingDays : enrichedDays;
+  const allInPast =
+    enrichedDays.length > 0 &&
+    enrichedDays.every((d) => d.offset != null && d.offset < 0);
 
   const updatedLabel = updatedAt
     ? new Date(updatedAt).toLocaleString("es-MX", {
@@ -156,17 +218,26 @@ export default function PronosticoSmn({
         )}
       </div>
 
+      {allInPast && (
+        <p className="text-xs text-amber-300/90 bg-amber-950/30 border border-amber-700/40 rounded-lg p-2">
+          El pronóstico almacenado corresponde a fechas pasadas. Pulsa “Actualizar” para
+          intentar recuperar datos vigentes desde SMN.
+        </p>
+      )}
+
       {selected && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {selected.days.map((day) => (
+          {displayDays.map((day) => (
             <div
-              key={`${selected.idmun}-${day.ndia}`}
+              key={`${selected.idmun}-${day.dloc ?? day.ndia}`}
               className="rounded-xl border border-slate-700/80 bg-slate-950/60 p-3 space-y-2"
             >
               <div className="text-sm font-semibold text-slate-200">
-                {DAY_LABELS[day.ndia] ?? `Día +${day.ndia}`}
+                {day.offset != null ? relativeDayLabel(day.offset) : `Día +${day.ndia}`}
               </div>
-              <div className="text-[10px] text-slate-500">{day.dloc}</div>
+              <div className="text-[10px] text-slate-400 capitalize">
+                {formatLongDate(day.date) || day.dloc}
+              </div>
               <div className="flex items-center gap-2 text-sky-300">
                 <CloudRain size={14} />
                 <span className="text-lg font-bold">{day.prec?.toFixed(1)}</span>

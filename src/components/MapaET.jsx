@@ -33,7 +33,7 @@ function HeatLayer({ puntos }) {
   useEffect(() => {
     if (!puntos.length) return;
 
-    const heatData = puntos.map((p) => [p.lat, p.lon, p.lluvia_mm || 0]);
+    const heatData = puntos.map((p) => [p.lat, p.lon, p.acumulado_7d_mm || p.lluvia_mm || 0]);
 
     const heat = L.heatLayer(heatData, {
       radius: window.innerWidth < 640 ? 15 : 25,
@@ -64,12 +64,12 @@ export default function MapaET({ puntosRaw, onPointClick, selectedCoords }) {
     return [17.5, -91.25];
   }, [puntos]);
 
-  const rainMarkerStyle = (lluvia) => {
-    const v = Number(lluvia || 0);
-    if (v >= 80) return { color: "#1d4ed8", radius: 10 };
-    if (v >= 50) return { color: "#2563eb", radius: 9 };
-    if (v >= 25) return { color: "#0ea5e9", radius: 8 };
-    return { color: "#38bdf8", radius: 7 };
+  const rainMarkerStyle = (lluvia, acu7) => {
+    const v = Number(acu7 ?? lluvia ?? 0);
+    if (v >= 120) return { color: "#1d4ed8", radius: 11 };
+    if (v >= 80) return { color: "#2563eb", radius: 10 };
+    if (v >= 40) return { color: "#0ea5e9", radius: 9 };
+    return { color: "#38bdf8", radius: 8 };
   };
 
   return (
@@ -92,7 +92,7 @@ export default function MapaET({ puntosRaw, onPointClick, selectedCoords }) {
         {/*<FlyToPoint center={selectedCoords ? [selectedCoords.LAT, selectedCoords.LON] : null} />*/}
 
         {puntos.map((p, i) => {
-          const style = rainMarkerStyle(p.lluvia_mm);
+          const style = rainMarkerStyle(p.lluvia_mm, p.acumulado_7d_mm);
           const isSelected =
             selectedCoords &&
             selectedCoords.lat === p.lat &&
@@ -116,6 +116,8 @@ export default function MapaET({ puntosRaw, onPointClick, selectedCoords }) {
                 <div className="text-sm">
                   <div><b>Lat:</b> {p.lat.toFixed(3)}</div>
                   <div><b>Lon:</b> {p.lon.toFixed(3)}</div>
+                  <div><b>Lluvia día:</b> {Number(p.lluvia_mm || 0).toFixed(2)} mm</div>
+                  <div><b>Acum. 7d:</b> {Number(p.acumulado_7d_mm || 0).toFixed(2)} mm</div>
                   <div><b>Evapotranspiración:</b> {Number.isFinite(Number(p.ET_CALCULADA)) ? Number(p.ET_CALCULADA).toFixed(2) + " mm/día" : "N/A"}</div>
                 </div>
               </Tooltip>
