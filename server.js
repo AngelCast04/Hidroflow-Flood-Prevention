@@ -2,6 +2,7 @@ const express = require("express");
 const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
 const { fetchTabascoForecast, warmSmnCache } = require("./lib/smnForecast");
+const { getPowerDailyCsv, warmPowerCache } = require("./lib/nasaPower");
 
 const app = express();
 
@@ -182,6 +183,50 @@ app.get("/api/forecast/tabasco", async (_req, res) => {
   }
 });
 
+app.options("/api/power/daily", (_req, res) => {
+  res.set(apiJsonHeaders).status(200).send("");
+});
+
+/** CSV diario NASA POWER (6 puntos MVP). Query: ?refresh=1 fuerza sync. */
+app.get("/api/power/daily", async (req, res) => {
+  try {
+    const refresh = req.query.refresh === "1" || req.query.refresh === "true";
+    const { csv, meta, fromCache, refreshing } = await getPowerDailyCsv({ refresh });
+    res
+      .set({
+        ...apiJsonHeaders,
+        "Content-Type": "text/csv; charset=utf-8",
+        "X-Power-Source": meta?.source || "nasa-power",
+        "X-Power-From-Cache": fromCache ? "1" : "0",
+        "X-Power-Refreshing": refreshing ? "1" : "0",
+        "X-Power-Rows": String(meta?.rows ?? ""),
+        "X-Power-Last-End": meta?.lastEnd || "",
+        "X-Power-Updated-At": meta?.updatedAt || "",
+      })
+      .status(200)
+      .send(csv);
+  } catch (error) {
+    res.set(apiJsonHeaders).status(502).json({
+      error: error?.message || "No se pudo obtener datos NASA POWER",
+    });
+  }
+});
+
+app.options("/api/power/meta", (_req, res) => {
+  res.set(apiJsonHeaders).status(200).send("");
+});
+
+app.get("/api/power/meta", async (_req, res) => {
+  try {
+    const { meta, fromCache, refreshing } = await getPowerDailyCsv();
+    res.set(apiJsonHeaders).status(200).json({ ...meta, fromCache, refreshing });
+  } catch (error) {
+    res.set(apiJsonHeaders).status(502).json({
+      error: error?.message || "No se pudo leer meta NASA POWER",
+    });
+  }
+});
+
 // Producción: servir el build de CRA y respaldo de datos en public/
 const buildDir = path.join(__dirname, "build");
 const publicDataDir = path.join(__dirname, "public", "data");
@@ -197,5 +242,6 @@ const port = Number(process.env.PORT) || 3001;
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
   warmSmnCache();
+  warmPowerCache();
 });
 

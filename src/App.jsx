@@ -86,7 +86,13 @@ export default function App() {
       `GWETPROF: ${Number.isFinite(Number(selectedPoint.gwetprof)) ? Number(selectedPoint.gwetprof).toFixed(2) : "N/A"}`,
       `Acumulado 3d mm: ${Number(selectedPoint.acumulado_3d_mm || 0).toFixed(2)}`,
       `Acumulado 7d mm: ${Number(selectedPoint.acumulado_7d_mm || 0).toFixed(2)}`,
+      `Balance diario P-ET mm: ${Number.isFinite(Number(selectedPoint.balance_mm)) ? Number(selectedPoint.balance_mm).toFixed(2) : "N/A"}`,
+      `Excedente 7d mm: ${Number(selectedPoint.excedente_7d_mm || 0).toFixed(2)}`,
+      `Excedente 15d mm: ${Number(selectedPoint.excedente_15d_mm || 0).toFixed(2)}`,
+      `Excedente 30d mm: ${Number(selectedPoint.excedente_30d_mm || 0).toFixed(2)}`,
       `Riesgo actual: ${selectedPoint.nivel_riesgo || "N/A"}`,
+      `Riesgo por lluvia: ${selectedPoint.nivel_riesgo_lluvia || "N/A"}`,
+      `Riesgo por excedente: ${selectedPoint.nivel_riesgo_excedente || "N/A"}`,
       `Pendiente: ${selectedPoint.pendiente_clase || "N/A"}`,
       `Uso de suelo: ${selectedPoint.uso_suelo || "N/A"}`,
       `Distancia a rio m: ${selectedPoint.distancia_rio_m ?? "N/A"}`,
@@ -470,7 +476,11 @@ flex flex-col gap-4 min-w-0 min-h-0
           : loadError
             ? <div className="p-6 text-red-300 text-sm space-y-2">
                 <p>{loadError}</p>
-                <p className="text-slate-500 text-xs">Asegúrate de tener <code className="text-blue-300">public/data/DATASET_UPDATE.csv</code> y recarga la página.</p>
+                <p className="text-slate-500 text-xs">
+                  Con el API: <code className="text-blue-300">npm start</code> +{" "}
+                  <code className="text-blue-300">npm run start:client</code>. Respaldo:{" "}
+                  <code className="text-blue-300">public/data/DATASET_UPDATE.csv</code>.
+                </p>
               </div>
             : mapPoints.length === 0
               ? <div className="p-6 text-amber-300 text-sm">No hay puntos para mostrar en el mapa.</div>

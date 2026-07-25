@@ -8,6 +8,21 @@ export function normalizeMunicipio(name) {
     .trim();
 }
 
+/** Municipios de la región Chontalpa (nombres normalizados como los publica SMN). */
+export const CHONTALPA_MUNICIPIOS = [
+  "cardenas",
+  "comalcalco",
+  "cunduacan",
+  "huimanguillo",
+  "jalpa de mendez",
+  "nacajuca",
+  "paraiso",
+];
+
+export function isChontalpa(name) {
+  return CHONTALPA_MUNICIPIOS.includes(normalizeMunicipio(name));
+}
+
 /** Empareja el municipio del panel (centroides) con un registro del pronóstico SMN. */
 export function matchSmnMunicipio(localName, municipalities = []) {
   if (!localName || !municipalities.length) return null;

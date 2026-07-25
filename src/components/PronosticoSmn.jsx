@@ -7,7 +7,7 @@ import {
   Wind,
   CalendarDays,
 } from "lucide-react";
-import { matchSmnMunicipio, forecastAdvisory } from "../utils/matchSmnMunicipio";
+import { matchSmnMunicipio, forecastAdvisory, isChontalpa } from "../utils/matchSmnMunicipio";
 
 function parseSmnDloc(dloc) {
   if (!dloc || typeof dloc !== "string") return null;
@@ -61,20 +61,33 @@ export default function PronosticoSmn({
   error,
   reload,
 }) {
-  const municipalities = data?.municipalities ?? [];
+  const allMunicipalities = useMemo(() => data?.municipalities ?? [], [data]);
   const updatedAt = data?.updatedAt ?? null;
   const source = data?.source ?? "SMN-CONAGUA";
   const [selectedIdmun, setSelectedIdmun] = useState("");
 
   const linkedMatch = useMemo(
-    () => matchSmnMunicipio(linkedMunicipio, municipalities),
-    [linkedMunicipio, municipalities]
+    () => matchSmnMunicipio(linkedMunicipio, allMunicipalities),
+    [linkedMunicipio, allMunicipalities]
   );
+
+  // Solo Chontalpa; se conserva el municipio ligado al punto del mapa aunque quede fuera.
+  const municipalities = useMemo(() => {
+    const chontalpa = allMunicipalities.filter((m) => isChontalpa(m.nmun));
+    const list =
+      linkedMatch && !chontalpa.some((m) => String(m.idmun) === String(linkedMatch.idmun))
+        ? [...chontalpa, linkedMatch]
+        : chontalpa;
+    return list.sort((a, b) => String(a.nmun).localeCompare(String(b.nmun), "es"));
+  }, [allMunicipalities, linkedMatch]);
 
   useEffect(() => {
     if (linkedMatch?.idmun) {
       setSelectedIdmun(String(linkedMatch.idmun));
-    } else if (!selectedIdmun && municipalities[0]?.idmun) {
+      return;
+    }
+    const stillListed = municipalities.some((m) => String(m.idmun) === String(selectedIdmun));
+    if (!stillListed && municipalities[0]?.idmun) {
       setSelectedIdmun(String(municipalities[0].idmun));
     }
   }, [linkedMatch, municipalities, selectedIdmun]);
@@ -122,7 +135,7 @@ export default function PronosticoSmn({
   if (loading) {
     return (
       <div className="p-6 text-slate-400 text-sm animate-pulse">
-        Cargando pronóstico SMN para Tabasco…
+        Cargando pronóstico SMN para la Chontalpa…
       </div>
     );
   }
@@ -155,7 +168,7 @@ export default function PronosticoSmn({
         <div>
           <h2 className="text-base font-semibold text-blue-300 flex items-center gap-2">
             <CalendarDays size={18} />
-            Pronóstico 3 días — Tabasco
+            Pronóstico 3 días — Chontalpa
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Fuente: {source} · Actualizado: {updatedLabel}
@@ -264,8 +277,8 @@ export default function PronosticoSmn({
       )}
 
       <div className="text-[10px] text-slate-600 border-t border-slate-800 pt-3">
-        API: smn.conagua.gob.mx/tools/GUI/webservices/?method=1 · {data?.municipalityCount}{" "}
-        municipios
+        API: smn.conagua.gob.mx/tools/GUI/webservices/?method=1 · {municipalities.length} de{" "}
+        {data?.municipalityCount} municipios (región Chontalpa)
       </div>
     </div>
   );

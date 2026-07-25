@@ -20,6 +20,10 @@
 .env
 generarVectores.js
 
+# Caché local NASA POWER (no subir al repo todavía)
+/data/power_cache/
+/data/nasa_power_test/
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

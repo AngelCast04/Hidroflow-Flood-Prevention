@@ -229,15 +229,35 @@ export default function InfoSheet({ selectedPoint, activeLayer }) {
               progress={1 - clamp01((Number(selectedPoint.distancia_rio_m || 0)) / 3000)}
               color="bg-blue-500"
             />
+            <MetricCard
+              label="Excedente acumulado 7d"
+              value={formatNum(selectedPoint.excedente_7d_mm)}
+              unit="mm"
+              progress={clamp01(Math.max(0, Number(selectedPoint.excedente_7d_mm || 0)) / 200)}
+              color="bg-cyan-500"
+            />
+            <MetricCard
+              label="Excedente acumulado 30d"
+              value={formatNum(selectedPoint.excedente_30d_mm)}
+              unit="mm"
+              progress={clamp01(Math.max(0, Number(selectedPoint.excedente_30d_mm || 0)) / 200)}
+              color="bg-indigo-500"
+            />
           </div>
 
           <div className="flex gap-2 flex-wrap">
             <Badge label={`Pendiente: ${selectedPoint.pendiente_clase || "N/A"}`} tone="slate" />
             <Badge label={`Uso de suelo: ${selectedPoint.uso_suelo || "N/A"}`} tone="slate" />
+            {selectedPoint.nivel_riesgo_lluvia && (
+              <Badge label={`Por lluvia: ${selectedPoint.nivel_riesgo_lluvia}`} tone="slate" />
+            )}
+            {selectedPoint.nivel_riesgo_excedente && (
+              <Badge label={`Por excedente: ${selectedPoint.nivel_riesgo_excedente}`} tone="slate" />
+            )}
           </div>
 
           <div className="text-slate-400">
-            Semáforo combinado a partir de lluvia reciente + vulnerabilidad local.
+            Semáforo híbrido: lluvia reciente + vulnerabilidad local + excedente hídrico (P − ET₀) a 7/15/30 días.
           </div>
         </div>
       )}

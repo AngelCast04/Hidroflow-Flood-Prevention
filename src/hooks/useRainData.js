@@ -127,7 +127,8 @@ function buildDailyRows(rawRows) {
   byPoint.forEach((rows, key) => {
     rows.sort((a, b) => a.YEAR - b.YEAR || a.DOY - b.DOY);
 
-    const enriched = rows.map((row, idx) => {
+    // Pasada 1: ET₀ FAO-56 y excedente diario P − ET₀
+    const withEt = rows.map((row) => {
       const et =
         Number.isFinite(row.t2m_c) && Number.isFinite(row.rh2_pct)
           ? calcEt0Daily({
@@ -140,13 +141,30 @@ function buildDailyRows(rawRows) {
               ws10Ms: row.ws10_m_s,
             })
           : null;
+      const lluvia = Number(row.lluvia_mm) || 0;
+      const balance_mm = Number.isFinite(et) ? lluvia - et : null;
+      return { ...row, ET_CALCULADA: et, balance_mm };
+    });
 
-      const slice3 = rows.slice(Math.max(0, idx - 2), idx + 1);
-      const slice7 = rows.slice(Math.max(0, idx - 6), idx + 1);
-      const acumulado3d = slice3.reduce((sum, item) => sum + (item.lluvia_mm || 0), 0);
-      const acumulado7d = slice7.reduce((sum, item) => sum + (item.lluvia_mm || 0), 0);
+    const sumRain = (slice) => slice.reduce((sum, item) => sum + (item.lluvia_mm || 0), 0);
+    const sumBalance = (slice) =>
+      slice.reduce((sum, item) => sum + (Number.isFinite(item.balance_mm) ? item.balance_mm : 0), 0);
 
-      const entry = { ...row, ET_CALCULADA: et, acumulado_3d_mm: acumulado3d, acumulado_7d_mm: acumulado7d };
+    // Pasada 2: acumulados de lluvia y de excedente (ventanas 3/7/15/30)
+    const enriched = withEt.map((row, idx) => {
+      const slice3 = withEt.slice(Math.max(0, idx - 2), idx + 1);
+      const slice7 = withEt.slice(Math.max(0, idx - 6), idx + 1);
+      const slice15 = withEt.slice(Math.max(0, idx - 14), idx + 1);
+      const slice30 = withEt.slice(Math.max(0, idx - 29), idx + 1);
+
+      const entry = {
+        ...row,
+        acumulado_3d_mm: sumRain(slice3),
+        acumulado_7d_mm: sumRain(slice7),
+        excedente_7d_mm: sumBalance(slice7),
+        excedente_15d_mm: sumBalance(slice15),
+        excedente_30d_mm: sumBalance(slice30),
+      };
       if (!globalLatest || entry.fecha > globalLatest) globalLatest = entry.fecha;
       return entry;
     });
@@ -175,7 +193,9 @@ export default function useRainData() {
   useEffect(() => {
     let cancelled = false;
 
+    // API viva primero; CSV estático como respaldo si falla el servidor / NASA.
     const datasetCandidates = [
+      "/api/power/daily",
       "/data/DATASET_UPDATE.csv",
       "/data/Evapotranspiracion%20RP.csv",
       "/data/Evapotranspiracion RP.csv",
@@ -190,51 +210,53 @@ export default function useRainData() {
       setLoading(false);
     };
 
+    const applyCsv = (csv) => {
+      if (cancelled) return false;
+      if (/<!doctype html/i.test(csv)) return false;
+      // POWER API: header en primeras líneas; CSV local: al inicio.
+      const head = csv.slice(0, 2500);
+      if (!/YEAR,DOY,LAT,LON/i.test(head) && !/YEAR,DOY,/i.test(head)) return false;
+
+      return new Promise((resolve, reject) => {
+        Papa.parse(csv, {
+          header: true,
+          dynamicTyping: false,
+          skipEmptyLines: true,
+          complete: resolve,
+          error: reject,
+        });
+      }).then((result) => {
+        if (cancelled) return false;
+        const { seriesByPoint, mapRows, latestDate: latest } = buildDailyRows(result.data || []);
+        if (!mapRows.length) return false;
+        seriesRef.current = seriesByPoint;
+        setMapRows(mapRows);
+        setLatestDate(latest);
+        setLoadError(null);
+        setLoading(false);
+        return true;
+      });
+    };
+
     (async () => {
       for (const path of datasetCandidates) {
         if (cancelled) return;
         try {
           const res = await fetch(path, { cache: "no-store" });
           if (!res.ok) continue;
+          const contentType = res.headers.get("content-type") || "";
+          // El endpoint POWER puede devolver JSON de error con 502; aquí solo ok.
+          if (contentType.includes("application/json")) continue;
           const csv = await res.text();
-          if (/<!doctype html/i.test(csv)) continue;
-          if (!/YEAR,DOY,LAT,LON/i.test(csv.slice(0, 300))) continue;
-
-          const result = await new Promise((resolve, reject) => {
-            Papa.parse(csv, {
-              header: true,
-              dynamicTyping: false,
-              skipEmptyLines: true,
-              complete: resolve,
-              error: reject,
-            });
-          });
-
-          if (cancelled) return;
-
-          setTimeout(() => {
-            if (cancelled) return;
-            try {
-              const { seriesByPoint, mapRows, latestDate: latest } = buildDailyRows(result.data || []);
-              if (!mapRows.length) {
-                finishWithError("El dataset diario no produjo puntos válidos.");
-                return;
-              }
-              seriesRef.current = seriesByPoint;
-              setMapRows(mapRows);
-              setLatestDate(latest);
-              setLoadError(null);
-              setLoading(false);
-            } catch (err) {
-              finishWithError(err?.message || "Error al procesar el dataset diario.");
-            }
-          }, 0);
-          return;
+          const ok = await applyCsv(csv);
+          if (ok) return;
         } catch (_e) {
           // Intentar siguiente ruta
         }
       }
-      finishWithError("No se encontró DATASET_UPDATE.csv. Verifica public/data/.");
+      finishWithError(
+        "No se pudieron cargar datos diarios (API NASA POWER ni CSV de respaldo)."
+      );
     })();
 
     return () => {
