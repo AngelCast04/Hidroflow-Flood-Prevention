@@ -203,7 +203,7 @@ Render ejecuta:
 - **Start Command:** `npm start`
 - Mismas variables de entorno que arriba.
 
-En el primer arranque, `warmPowerCache()` puede descargar o regenerar la serie POWER (disco efímero en Render).
+En el primer arranque, `warmPowerCache()` siembra desde `public/data/DATASET_UPDATE.csv` (incluido en el deploy) y completa el hueco hasta ayer con NASA POWER (sync incremental). El CSV sigue disponible como respaldo del front si la API falla.
 
 ---
 

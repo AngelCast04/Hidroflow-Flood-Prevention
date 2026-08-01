@@ -1,5 +1,8 @@
-const express = require("express");
 const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env.local") });
+require("dotenv").config({ path: path.join(__dirname, ".env") });
+
+const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { fetchTabascoForecast, warmSmnCache } = require("./lib/smnForecast");
 const { getPowerDailyCsv, warmPowerCache } = require("./lib/nasaPower");
@@ -112,7 +115,7 @@ app.post("/api/chat", async (req, res) => {
         messages: [
           {
             role: "system",
-            content: `Eres un asistente de prevencion de inundaciones para Tabasco.
+            content: `Eres un asistente de prevencion de inundaciones para la región de la Chontalpa en Tabasco.
 
 Objetivo:
 - Explicar el riesgo hidrometeorologico con lenguaje claro.

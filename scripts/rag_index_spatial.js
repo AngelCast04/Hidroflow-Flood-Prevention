@@ -1,6 +1,9 @@
 /* eslint-disable no-console */
 /**
- * Indexa el dataset espacial (CSV) a Supabase (pgvector) para RAG.
+ * Indexa DATASET_UPDATE.csv (diario) a Supabase (pgvector) para RAG.
+ *
+ * Formato esperado:
+ *   YEAR,DOY,LAT,LON,...,PRECTOTCORR,PS,WS10M,GWETPROF,GWETROOT
  *
  * Requiere env vars:
  * - SUPABASE_URL
@@ -8,32 +11,23 @@
  * - OPENAI_API_KEY            (para embeddings)
  *
  * Uso:
- *   node scripts/rag_index_spatial.js
+ *   npm run rag:index:spatial
  */
 
 const fs = require("fs");
 const path = require("path");
+
+require("dotenv").config({ path: path.join(__dirname, "..", ".env.local") });
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
+
 const Papa = require("papaparse");
 const { createClient } = require("@supabase/supabase-js");
 
-const CSV_PATH = path.join(__dirname, "..", "public", "data", "Evapotranspiracion RP.csv");
-
-const MONTHS = [
-  { key: "JAN", month: 1, label: "ENE" },
-  { key: "FEB", month: 2, label: "FEB" },
-  { key: "MAR", month: 3, label: "MAR" },
-  { key: "APR", month: 4, label: "ABR" },
-  { key: "MAY", month: 5, label: "MAY" },
-  { key: "JUN", month: 6, label: "JUN" },
-  { key: "JUL", month: 7, label: "JUL" },
-  { key: "AUG", month: 8, label: "AGO" },
-  { key: "SEP", month: 9, label: "SEP" },
-  { key: "OCT", month: 10, label: "OCT" },
-  { key: "NOV", month: 11, label: "NOV" },
-  { key: "DEC", month: 12, label: "DIC" },
+const CSV_CANDIDATES = [
+  path.join(__dirname, "..", "public", "data", "DATASET_UPDATE.csv"),
+  path.join(__dirname, "..", "data", "power_cache", "DATASET_POWER.csv"),
 ];
 
-// Centroides aproximados (mismo enfoque que useRainData.js)
 const MUNICIPALITY_CENTROIDS = [
   { name: "Villahermosa", lat: 17.9892, lon: -92.9475 },
   { name: "Cárdenas", lat: 18.001, lon: -93.375 },
@@ -41,7 +35,6 @@ const MUNICIPALITY_CENTROIDS = [
   { name: "Cunduacán", lat: 18.0655, lon: -93.1738 },
   { name: "Huimanguillo", lat: 17.8374, lon: -93.3839 },
   { name: "Paraíso", lat: 18.3969, lon: -93.2147 },
-
 ];
 
 function distanceKm(lat1, lon1, lat2, lon2) {
@@ -69,6 +62,42 @@ function getMunicipalityFromCoords(lat, lon) {
   return nearest?.name || "Tabasco";
 }
 
+function toNumber(x) {
+  if (x === null || x === undefined || x === "") return null;
+  const raw = String(x).trim().toUpperCase();
+  if (!raw || raw === "N/A" || raw === "NA") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= -998) return null;
+  return n;
+}
+
+function percentile(sorted, p) {
+  if (!sorted.length) return null;
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * p)));
+  return sorted[idx];
+}
+
+function stats(values) {
+  const vals = values.filter((v) => Number.isFinite(v));
+  if (!vals.length) return null;
+  const sorted = [...vals].sort((a, b) => a - b);
+  const sum = sorted.reduce((s, x) => s + x, 0);
+  return {
+    n: sorted.length,
+    mean: sum / sorted.length,
+    p90: percentile(sorted, 0.9),
+    max: sorted[sorted.length - 1],
+    min: sorted[0],
+  };
+}
+
+function resolveCsvPath() {
+  for (const p of CSV_CANDIDATES) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
 async function embedText(apiKey, text) {
   const r = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
@@ -82,9 +111,86 @@ async function embedText(apiKey, text) {
   return json?.data?.[0]?.embedding;
 }
 
-function toNumber(x) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : null;
+function buildPointChunk(p, rain, gwet) {
+  const years = Array.from(p.years).sort((a, b) => a - b);
+  const yearMin = years[0];
+  const yearMax = years[years.length - 1];
+  const lines = [
+    `Punto de monitoreo diario (Chontalpa / Tabasco)`,
+    `Municipio aproximado: ${p.municipio}`,
+    `Coordenadas: lat ${p.lat}, lon ${p.lon}`,
+    `Fuente: DATASET_UPDATE (NASA POWER / MERRA-2, diario)`,
+    `Cobertura: ${yearMin}–${yearMax} (${rain?.n ?? 0} días con lluvia válida)`,
+  ];
+  if (rain) {
+    lines.push(
+      `Lluvia diaria PRECTOTCORR (mm/día): media=${rain.mean.toFixed(2)}, p90=${rain.p90.toFixed(2)}, max=${rain.max.toFixed(2)}, min=${rain.min.toFixed(2)}`
+    );
+  }
+  if (gwet) {
+    lines.push(
+      `Humedad de perfil GWETPROF (0–1): media=${gwet.mean.toFixed(2)}, p90=${gwet.p90.toFixed(2)}, max=${gwet.max.toFixed(2)}`
+    );
+  }
+  lines.push(
+    `Uso sugerido: explicar riesgo por lluvia acumulada, saturación relativa y estacionalidad local.`
+  );
+  return {
+    source: "DATASET_UPDATE.csv",
+    chunk: lines.join("\n"),
+    metadata: {
+      tipo: "punto_diario",
+      municipio: p.municipio,
+      lat: p.lat,
+      lon: p.lon,
+      yearMin,
+      yearMax,
+      dias: rain?.n ?? 0,
+    },
+  };
+}
+
+function buildMunicipioChunk(name, points) {
+  const allRain = [];
+  const allGwet = [];
+  const years = new Set();
+  for (const p of points) {
+    allRain.push(...p.lluviaVals);
+    allGwet.push(...p.gwetVals);
+    p.years.forEach((y) => years.add(y));
+  }
+  const rain = stats(allRain);
+  const gwet = stats(allGwet);
+  const yearList = Array.from(years).sort((a, b) => a - b);
+  if (!rain) return null;
+
+  const lines = [
+    `Resumen municipal diario — ${name} (Chontalpa, Tabasco)`,
+    `Puntos de grilla agregados: ${points.length}`,
+    `Fuente: DATASET_UPDATE (NASA POWER / MERRA-2)`,
+    `Cobertura: ${yearList[0]}–${yearList[yearList.length - 1]}`,
+    `Lluvia diaria (mm/día): media=${rain.mean.toFixed(2)}, p90=${rain.p90.toFixed(2)}, max=${rain.max.toFixed(2)}`,
+  ];
+  if (gwet) {
+    lines.push(
+      `GWETPROF promedio del municipio (0–1): media=${gwet.mean.toFixed(2)}, p90=${gwet.p90.toFixed(2)}`
+    );
+  }
+  lines.push(
+    `Contexto: zona de llanura aluvial susceptible a inundaciones; usar para comparar municipios y orientar prevención comunitaria.`
+  );
+
+  return {
+    source: "DATASET_UPDATE.csv",
+    chunk: lines.join("\n"),
+    metadata: {
+      tipo: "municipio_diario",
+      municipio: name,
+      puntos: points.length,
+      yearMin: yearList[0],
+      yearMax: yearList[yearList.length - 1],
+    },
+  };
 }
 
 async function main() {
@@ -98,29 +204,38 @@ async function main() {
   if (!openaiKey) {
     throw new Error("Falta OPENAI_API_KEY para generar embeddings.");
   }
-  if (!fs.existsSync(CSV_PATH)) {
-    throw new Error(`No existe el CSV en ${CSV_PATH}`);
+
+  const csvPath = resolveCsvPath();
+  if (!csvPath) {
+    throw new Error(
+      `No se encontró DATASET_UPDATE.csv. Buscado en:\n${CSV_CANDIDATES.join("\n")}`
+    );
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey, {
     auth: { persistSession: false },
   });
 
-  console.log("Leyendo CSV...");
-  const csv = fs.readFileSync(CSV_PATH, "utf8");
-  const parsed = Papa.parse(csv, { header: true, dynamicTyping: true, skipEmptyLines: true });
+  console.log("Leyendo CSV diario:", csvPath);
+  const csv = fs.readFileSync(csvPath, "utf8");
+  const parsed = Papa.parse(csv, { header: true, dynamicTyping: false, skipEmptyLines: true });
   const rows = parsed.data || [];
 
-  // Agregación por punto (lat,lon): resumimos lluvia (PRECTOTCORR) por meses/años
-  const points = new Map(); // key -> {lat,lon, municipio, years:Set, lluviaVals:number[]}
+  const points = new Map();
 
   for (const r of rows) {
     const year = toNumber(r.YEAR);
+    const doy = toNumber(r.DOY);
     const lat = toNumber(r.LAT);
     const lon = toNumber(r.LON);
-    const parametro = String(r.PARAMETRO || "").trim().toUpperCase();
-    if (!Number.isFinite(year) || !Number.isFinite(lat) || !Number.isFinite(lon) || !parametro) continue;
-    if (parametro !== "PRECTOTCORR") continue;
+    const lluvia = toNumber(r.PRECTOTCORR);
+    const gwet = toNumber(r.GWETPROF);
+
+    if (!Number.isFinite(year) || !Number.isFinite(doy) || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+      continue;
+    }
+    // Sin lluvia válida no aporta al resumen de precipitación
+    if (!Number.isFinite(lluvia)) continue;
 
     const key = `${lat}_${lon}`;
     if (!points.has(key)) {
@@ -130,56 +245,55 @@ async function main() {
         municipio: getMunicipalityFromCoords(lat, lon),
         years: new Set(),
         lluviaVals: [],
+        gwetVals: [],
       });
     }
     const p = points.get(key);
     p.years.add(year);
-
-    for (const m of MONTHS) {
-      const v = toNumber(r[m.key]);
-      if (Number.isFinite(v)) p.lluviaVals.push(v);
-    }
+    p.lluviaVals.push(lluvia);
+    if (Number.isFinite(gwet)) p.gwetVals.push(gwet);
   }
 
   console.log(`Puntos encontrados: ${points.size}`);
 
   const docs = [];
+  const byMunicipio = new Map();
+
   for (const p of points.values()) {
-    const vals = p.lluviaVals.filter((x) => Number.isFinite(x));
-    if (!vals.length) continue;
-    vals.sort((a, b) => a - b);
-    const mean = vals.reduce((s, x) => s + x, 0) / vals.length;
-    const p90 = vals[Math.floor(vals.length * 0.9)];
-    const max = vals[vals.length - 1];
+    const rain = stats(p.lluviaVals);
+    const gwet = stats(p.gwetVals);
+    if (!rain) continue;
 
-    const years = Array.from(p.years).sort((a, b) => a - b);
-    const yearMin = years[0];
-    const yearMax = years[years.length - 1];
+    docs.push(buildPointChunk(p, rain, gwet));
 
-    const chunk = [
-      `Dataset espacial (punto de grilla)`,
-      `Municipio aproximado: ${p.municipio}`,
-      `Coordenadas: lat ${p.lat}, lon ${p.lon}`,
-      `Serie: lluvia mensual PRECTOTCORR (mm/mes)`,
-      `Cobertura de años: ${yearMin}–${yearMax} (según el CSV)`,
-      `Estadísticos (mm/mes): media=${mean.toFixed(2)}, p90=${p90.toFixed(2)}, max=${max.toFixed(2)}`,
-      `Uso sugerido: contexto local para explicar riesgo por acumulados y estacionalidad.`,
-    ].join("\n");
-
-    docs.push({
-      source: "Evapotranspiracion RP.csv",
-      chunk,
-      metadata: { tipo: "punto_grilla", municipio: p.municipio, lat: p.lat, lon: p.lon, yearMin, yearMax },
-    });
+    if (!byMunicipio.has(p.municipio)) byMunicipio.set(p.municipio, []);
+    byMunicipio.get(p.municipio).push(p);
   }
 
-  console.log(`Docs a indexar: ${docs.length}`);
+  for (const [name, pts] of byMunicipio.entries()) {
+    const munDoc = buildMunicipioChunk(name, pts);
+    if (munDoc) docs.push(munDoc);
+  }
 
-  // Insert por lotes (con embeddings)
+  console.log(`Docs a indexar: ${docs.length} (${points.size} puntos + ${byMunicipio.size} municipios)`);
+  if (!docs.length) {
+    throw new Error("No se generaron documentos. Revisa que PRECTOTCORR tenga valores válidos.");
+  }
+
+  // Evita duplicar si se corre el script varias veces sobre la misma fuente
+  console.log("Eliminando chunks previos de DATASET_UPDATE.csv (si existen)...");
+  const { error: delError } = await supabase
+    .from("rag_chunks")
+    .delete()
+    .eq("source", "DATASET_UPDATE.csv");
+  if (delError) {
+    console.warn("No se pudieron borrar chunks previos (¿tabla/RLS?):", delError.message);
+  }
+
   const batchSize = 25;
   for (let i = 0; i < docs.length; i += batchSize) {
     const batch = docs.slice(i, i + batchSize);
-    console.log(`Embedding + upsert batch ${i}..${i + batch.length - 1}`);
+    console.log(`Embedding + insert batch ${i}..${i + batch.length - 1}`);
 
     const rowsToInsert = [];
     for (const d of batch) {
@@ -191,11 +305,10 @@ async function main() {
     if (error) throw error;
   }
 
-  console.log("Indexación RAG completada.");
+  console.log("Indexación RAG diaria completada.");
 }
 
 main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
-
