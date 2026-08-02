@@ -175,9 +175,13 @@ app.options("/api/forecast/tabasco", (_req, res) => {
   res.set(apiJsonHeaders).status(200).send("");
 });
 
-app.get("/api/forecast/tabasco", async (_req, res) => {
+app.get("/api/forecast/tabasco", async (req, res) => {
   try {
-    const payload = await fetchTabascoForecast();
+    const forceRefresh =
+      req.query.refresh === "1" ||
+      req.query.refresh === "true" ||
+      req.query.force === "1";
+    const payload = await fetchTabascoForecast({ forceRefresh });
     res.set(apiJsonHeaders).status(200).json(payload);
   } catch (error) {
     res.set(apiJsonHeaders).status(502).json({

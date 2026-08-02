@@ -5,11 +5,13 @@ export default function useSmnForecast() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts = {}) => {
+    const force = Boolean(opts.force);
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/forecast/tabasco", { cache: "no-store" });
+      const qs = force ? "?refresh=1" : "";
+      const res = await fetch(`/api/forecast/tabasco${qs}`, { cache: "no-store" });
       const text = await res.text();
       let body;
       try {
@@ -32,14 +34,16 @@ export default function useSmnForecast() {
   }, []);
 
   useEffect(() => {
-    load();
+    load({ force: false });
   }, [load]);
+
+  const reload = useCallback(() => load({ force: true }), [load]);
 
   return {
     data,
     loading,
     error,
-    reload: load,
+    reload,
     municipalities: data?.municipalities ?? [],
     updatedAt: data?.updatedAt ?? null,
     source: data?.source ?? "SMN-CONAGUA",

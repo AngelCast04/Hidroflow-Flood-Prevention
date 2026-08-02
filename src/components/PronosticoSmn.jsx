@@ -172,16 +172,21 @@ export default function PronosticoSmn({
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Fuente: {source} · Actualizado: {updatedLabel}
-            {data?.fromCache ? " (caché servidor)" : ""}
+            {data?.stale || data?.fromFallbackFile
+              ? " (respaldo local)"
+              : data?.fromCache
+                ? " (caché servidor)"
+                : " (en vivo)"}
           </p>
         </div>
         <button
           type="button"
           onClick={reload}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-slate-800"
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
         >
-          <RefreshCw size={14} />
-          Actualizar
+          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+          {loading ? "Actualizando…" : "Actualizar"}
         </button>
       </div>
 
@@ -231,10 +236,11 @@ export default function PronosticoSmn({
         )}
       </div>
 
-      {allInPast && (
+      {allInPast && !data?.warning && (
         <p className="text-xs text-amber-300/90 bg-amber-950/30 border border-amber-700/40 rounded-lg p-2">
           El pronóstico almacenado corresponde a fechas pasadas. Pulsa “Actualizar” para
-          intentar recuperar datos vigentes desde SMN.
+          reintentar contra SMN (si el servicio nacional está caído, el respaldo no
+          cambiará hasta que vuelva a responder).
         </p>
       )}
 
