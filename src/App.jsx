@@ -267,8 +267,8 @@ export default function App() {
       {/* asesor */}
       <div className="mt-4 pt-4 border-t border-slate-700 text-xs text-slate-400">
         Asesor: 
-        <p>Dr. Carlos González Zacarias<p/>
-        <p>Dr. Arturo Corona Ferreira<p/>
+        <p>Dr. Carlos González Zacarias</p>
+        <p>Dr. Arturo Corona Ferreira</p>
       </div>
 
     </div>
