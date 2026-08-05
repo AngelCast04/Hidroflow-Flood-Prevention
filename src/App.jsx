@@ -261,12 +261,14 @@ export default function App() {
       {/* autores */}
       <div className="space-y-1 text-sm text-slate-200">
         <p>Angel Gabriel Tadeo Castellano</p>
-        <p>Zona de Análisis: Tabasco</p>
+        <p>Zona de Análisis: Región Chontalpa, Tabasco</p>
       </div>
 
       {/* asesor */}
       <div className="mt-4 pt-4 border-t border-slate-700 text-xs text-slate-400">
-        Asesor: Dr. Arturo Corona Ferreira
+        Asesor: 
+        Dr. Carlos González Zacarias
+        Dr. Arturo Corona Ferreira
       </div>
 
     </div>
