@@ -12,7 +12,7 @@ Plataforma web para **monitoreo y apoyo a la prevención de riesgo por inundaci�
 | Área              | Implementado                                                                                                                       |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | **Datos diarios** | Fuente preferente: NASA POWER vía `GET /api/power/daily` (6 puntos municipales). CSV estático en `public/data/` como **respaldo**. |
-| **Zona**          | Chontalpa: Cunduacán, Comalcalco, Villahermosa, Paraíso, Cárdenas, Huimanguillo (+ Jalpa de Méndez y Nacajuca en pronóstico SMN).  |
+| **Zona**          | Chontalpa: Cunduacán, Comalcalco, Villahermosa, Paraíso, Cárdenas, Huimanguillo (+ pronóstico SMN).  |
 | **Mapa**          | Capa de **lluvia**: heatmap + marcadores; tooltip con lat, lon, acumulados y evapotranspiración.                                   |
 | **Panel**         | Año / mes / **día**, lluvia, acumulados 3d y 7d, GWETPROF, riesgo, municipio aproximado.                                           |
 | **Info sheets**   | Lluvia, riesgo (híbrido) y ET; balance diario P - ET_0 y excedentes 7d / 15d / 30d.                                                |
